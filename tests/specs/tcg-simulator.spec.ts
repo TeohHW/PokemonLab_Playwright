@@ -229,6 +229,19 @@ test.describe('Pokemon TCG Simulator', () => {
         await expect(openedPack.locator('.holo-overlay')).toHaveCount(10);
       });
 
+      // Verifies a god pack still contributes unique cards to the selected binder.
+      test('Open god pack updates binder progress', async ({ page }) => {
+        await openTcgSimulator(page);
+
+        await page.getByRole('button', { name: /^open god pack$/i }).click();
+        await expectRevealedCardsWithImageSrc(page, 10);
+        await page.getByRole('button', { name: /^close$/i }).click();
+
+        const baseProgress = await getCollectionProgress(page, 'Base', 102);
+        expect(baseProgress).toBeGreaterThan(0);
+        expect(baseProgress).toBeLessThanOrEqual(102);
+      });
+
       // Verifies the random-pack action opens a pack with a visible set logo and 10 cards.
       test('Open random pack', async ({ page }) => {
         await openTcgSimulator(page);
@@ -516,6 +529,31 @@ test.describe('Pokemon TCG Simulator', () => {
         await expect(page.getByText('PIKACHU')).toBeVisible();
         await expect(page.getByText('ABRA')).toBeHidden();
       });
+
+      // Verifies invalid binder-card search hides card rows without affecting binder progress.
+      test('Binder card search invalid term shows no cards', async ({ page }) => {
+        await openTcgSimulator(page);
+
+        await page.getByPlaceholder('Search Pokemon in this set...').fill('not-a-card');
+
+        await expect(page.getByText('PIKACHU')).toBeHidden();
+        await expect(page.getByText('ABRA')).toBeHidden();
+        expect(await getCollectionProgress(page, 'Base', 102)).toBe(0);
+      });
+
+      // Verifies clearing binder-card search restores the selected set's full card list.
+      test('Clearing binder card search restores all binder cards', async ({ page }) => {
+        await openTcgSimulator(page);
+
+        await page.getByPlaceholder('Search Pokemon in this set...').fill('pika');
+        await expect(page.getByText('PIKACHU')).toBeVisible();
+        await expect(page.getByText('ABRA')).toBeHidden();
+
+        await page.getByPlaceholder('Search Pokemon in this set...').fill('');
+
+        await expect(page.getByText('PIKACHU')).toBeVisible();
+        await expect(page.getByText(/^ABRA$/i)).toBeVisible();
+      });
     });
 
     test.describe('Set selection', () => {
@@ -563,6 +601,23 @@ test.describe('Pokemon TCG Simulator', () => {
           expect(visibleSetText.toUpperCase()).toContain('SUN & MOON');
         }
       });
+
+      // Verifies sorting a filtered category keeps the category filter applied.
+      test('Sort sets while series filter is active', async ({ page }) => {
+        await openTcgSimulator(page);
+
+        await page.getByRole('button', { name: /^sun & moon$/i }).click();
+        await page.getByRole('combobox').selectOption({ label: 'Release year: newest first' });
+
+        const visibleSetTexts = await expansionSetButtons(page).evaluateAll((buttons) =>
+          buttons.map((button) => button.textContent ?? '')
+        );
+
+        expect(visibleSetTexts.length).toBeGreaterThan(0);
+        for (const visibleSetText of visibleSetTexts) {
+          expect(visibleSetText.toUpperCase()).toContain('SUN & MOON');
+        }
+      });
     });
 
     test.describe('Search', () => {
@@ -596,6 +651,26 @@ test.describe('Pokemon TCG Simulator', () => {
         await expect(expansionSetButtons(page)).toHaveCount(0);
       });
 
+      // Verifies an empty expansion search keeps the full set list visible.
+      test('Search empty set keeps all sets visible', async ({ page }) => {
+        await openTcgSimulator(page);
+
+        await page.getByPlaceholder('Search by set name...').fill('');
+
+        await expect(expansionSetButton(page, 'Base', 'Base', 1999)).toBeVisible();
+        await expect(expansionSetButton(page, 'Jungle', 'Base', 1999)).toBeVisible();
+        await expect(expansionSetButton(page, 'Fossil', 'Base', 1999)).toBeVisible();
+      });
+
+      // Verifies special characters in expansion search fail safely with no result tiles.
+      test('Search special characters shows no set results', async ({ page }) => {
+        await openTcgSimulator(page);
+
+        await page.getByPlaceholder('Search by set name...').fill('@@@');
+
+        await expect(expansionSetButtons(page)).toHaveCount(0);
+      });
+
       // Verifies expansion search ignores case and supports partial search text.
       test('Search set is case-insensitive and supports partial matches', async ({ page }) => {
         await openTcgSimulator(page);
@@ -623,6 +698,21 @@ test.describe('Pokemon TCG Simulator', () => {
         await expect(expansionSetButton(page, 'Fossil', 'Base', 1999)).toBeVisible();
       });
 
+      // Verifies clearing an invalid expansion search recovers from the empty result state.
+      test('Clear invalid set search restores set list', async ({ page }) => {
+        await openTcgSimulator(page);
+
+        await page.getByPlaceholder('Search by set name...').fill('Invalid');
+        await expect(expansionSetButtons(page)).toHaveCount(0);
+
+        await page.getByRole('button', { name: 'Clear expansion search' }).click();
+
+        await expect(page.getByPlaceholder('Search by set name...')).toHaveValue('');
+        await expect(expansionSetButton(page, 'Base', 'Base', 1999)).toBeVisible();
+        await expect(expansionSetButton(page, 'Jungle', 'Base', 1999)).toBeVisible();
+        await expect(expansionSetButton(page, 'Fossil', 'Base', 1999)).toBeVisible();
+      });
+
       // Verifies clearing the search input does not reset the currently selected expansion.
       test('Selecting a set from search keeps that set active after clearing search', async ({ page }) => {
         await openTcgSimulator(page);
@@ -638,6 +728,34 @@ test.describe('Pokemon TCG Simulator', () => {
         await expect(expansionSetButton(page, 'Base', 'Base', 1999)).toBeVisible();
         expect(await getCollectionProgress(page, 'Team Up', 198)).toBe(0);
         await expect(page.getByRole('button', { name: /^open 1 pack$/i })).toBeEnabled();
+      });
+
+      // Verifies expansion search respects the currently selected series filter.
+      test('Search set while series filter is active', async ({ page }) => {
+        await openTcgSimulator(page);
+
+        await page.getByRole('button', { name: /^sun & moon$/i }).click();
+        await page.getByPlaceholder('Search by set name...').fill('team');
+
+        await expect(expansionSetButton(page, 'Team Up', 'Sun & Moon', 2019)).toBeVisible();
+        await expect(expansionSetButton(page, 'Team Rocket', 'Base', 2000)).toBeHidden();
+      });
+
+      // Verifies sorting a searched result set keeps the search filter active.
+      test('Sort sets while search is active', async ({ page }) => {
+        await openTcgSimulator(page);
+
+        await page.getByPlaceholder('Search by set name...').fill('team');
+        await page.getByRole('combobox').selectOption({ label: 'Name: A to Z' });
+
+        const visibleSetTexts = await expansionSetButtons(page).evaluateAll((buttons) =>
+          buttons.map((button) => button.textContent ?? '')
+        );
+
+        expect(visibleSetTexts.length).toBeGreaterThan(0);
+        for (const visibleSetText of visibleSetTexts) {
+          expect(visibleSetText.toUpperCase()).toContain('TEAM');
+        }
       });
     });
   });
