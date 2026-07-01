@@ -210,6 +210,7 @@ test.describe('Pokemon Pokedex', () => {
       await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeHidden();
     });
 
+    // Verifies numeric search jumps directly to the matching Pokedex entry.
     pokedexTest('Search by Pokedex number finds the matching Pokemon', async ({ page }) => {
       await page.getByPlaceholder('Name or number...').fill('25');
       await page.getByRole('button', { name: /^search$/i }).click();
@@ -217,6 +218,7 @@ test.describe('Pokemon Pokedex', () => {
       await expect(pokemonListButton(page, 25, 'Pikachu')).toBeVisible();
       await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeHidden();
     });
+    // Verifies search normalizes casing and surrounding whitespace before matching.
     pokedexTest('Search is case-insensitive and trims extra spaces', async ({ page }) => {
       await page.getByPlaceholder('Name or number...').fill('   PiKaChU   ');
       await page.getByRole('button', { name: /^search$/i }).click();
@@ -224,6 +226,7 @@ test.describe('Pokemon Pokedex', () => {
       await expect(pokemonListButton(page, 25, 'Pikachu')).toBeVisible();
       await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeHidden();
     });
+    // Verifies unmatched search terms show both user feedback and an empty result state.
     pokedexTest('Invalid search displays no results or an empty state', async ({ page }) => {
       await page.getByPlaceholder('Name or number...').fill('testing');
       await page.getByRole('button', { name: /^search$/i }).click();
@@ -231,6 +234,7 @@ test.describe('Pokemon Pokedex', () => {
       await expect(page.getByText('Pokemon not found. Try a name')).toBeVisible();
       await expect(page.getByText('No Pokemon match this Pokedex')).toBeVisible();
     });
+    // Verifies Clear removes the active search term and restores the initial Pokemon list.
     pokedexTest('Clear button resets search and restores the default list', async ({ page }) => {
       await page.getByPlaceholder('Name or number...').fill('Pikachu');
       await page.getByRole('button', { name: /^search$/i }).click();
@@ -239,6 +243,7 @@ test.describe('Pokemon Pokedex', () => {
       await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeHidden();
       await clearPokemonSearch(page);
     });
+    // Verifies keyboard submission behaves the same as clicking the Search button.
     pokedexTest('Pressing Enter in the search field submits the search', async ({ page }) => {
       await page.getByPlaceholder('Name or number...').fill('Pikachu');
       await page.keyboard.press('Enter');
@@ -259,7 +264,7 @@ test.describe('Pokemon Pokedex', () => {
       await expect(page.getByText(/Mouse Pok.mon/)).toBeVisible();
       await expect(page.getByRole('button', { name: 'Play Pikachu cry' })).toBeVisible();
     });
-    // Verifies the featured TCG panel always shows cards corresponding to the pokemon searched
+    // Verifies the featured TCG panel always shows cards corresponding to the random Pokemon.
     pokedexTest('Featured TCG cards belong to the random Pokemon detail', async ({ page }) => {
       await page.getByRole('button', { name: /^random$/i }).click();
 
@@ -274,6 +279,7 @@ test.describe('Pokemon Pokedex', () => {
         expect(featuredCardName.toLowerCase()).toContain(expectedCardNamePart);
       }
     });
+    // Verifies searching a Pokemon also selects and populates that Pokemon in the detail panel.
     pokedexTest(
       'Detail view opened from search shows the correct selected Pokemon',
       async ({ page }) => {
@@ -287,6 +293,7 @@ test.describe('Pokemon Pokedex', () => {
         await expect(page.getByRole('button', { name: 'Play Pikachu cry' })).toBeVisible();
       }
     );
+    // Verifies the primary official artwork URL and loaded image dimensions match the selected Pokemon.
     pokedexTest('Pokemon detail images have valid image sources', async ({ page }) => {
       await page.getByRole('button', { name: /^random$/i }).click();
       const randomPokemon = await selectedPokemonIdentity(page);
@@ -308,6 +315,7 @@ test.describe('Pokemon Pokedex', () => {
         )
         .toBeGreaterThan(0);
     });
+    // Verifies generation sprite thumbnails use real PokeAPI sprite URLs and valid alt text.
     pokedexTest(
       'Generation sprites have valid image sources for a random Pokemon',
       async ({ page }) => {
@@ -341,6 +349,7 @@ test.describe('Pokemon Pokedex', () => {
       await expect(pokemonListButton(page, 152, 'Chikorita')).toBeHidden();
     });
 
+    // Verifies the Johto filter includes Johto Pokemon and hides Pokemon outside that regional list.
     pokedexTest(
       'Johto filter includes Johto starters and excludes non-listed Pokemon',
       async ({ page }) => {
@@ -351,6 +360,7 @@ test.describe('Pokemon Pokedex', () => {
         await expect(pokemonListButton(page, 252, 'Treecko')).toBeHidden();
       }
     );
+    // Verifies the Hoenn filter shows the Hoenn starter Pokemon and excludes earlier starters.
     pokedexTest('Hoenn filter includes Treecko, Torchic, and Mudkip', async ({ page }) => {
       await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
       await page.getByRole('button', { name: 'Ruby / Sapphire / Emerald' }).click();
@@ -360,6 +370,7 @@ test.describe('Pokemon Pokedex', () => {
       await expect(pokemonListButton(page, 255, 'Torchic')).toBeVisible();
       await expect(pokemonListButton(page, 258, 'Mudkip')).toBeVisible();
     });
+    // Verifies returning to All Games removes the active regional filter.
     pokedexTest(
       'All Games restores the full Pokedex list after a region filter',
       async ({ page }) => {
@@ -381,12 +392,14 @@ test.describe('Pokemon Pokedex', () => {
       await expect(pokemonListButtons(page).first()).toContainText(/Abomasnow|Abra/i);
     });
 
+    // Verifies switching back to Pokedex Number restores the default numerical ordering.
     pokedexTest('Sort by Pokedex Number restores numerical order', async ({ page }) => {
       await page.getByRole('combobox').selectOption({ label: 'Name' });
       await expect(pokemonListButtons(page).first()).not.toContainText('Bulbasaur');
       await page.getByRole('combobox').selectOption({ label: 'Pokedex Number' });
       await expect(pokemonListButtons(page).first()).toContainText('Bulbasaur');
     });
+    // Verifies Type sort can be applied while keeping expected Pokemon visible.
     pokedexTest('Sort by Type can be selected without dropping Pokemon', async ({ page }) => {
       await expect(pokemonListButtons(page).first()).toContainText('Bulbasaur');
       await page.getByRole('combobox').selectOption({ label: 'Type' });
@@ -394,6 +407,7 @@ test.describe('Pokemon Pokedex', () => {
       await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
       await expect(pokemonListButton(page, 10, 'Caterpie')).toBeVisible();
     });
+    // Verifies HP stat sort can be applied while keeping expected Pokemon visible.
     pokedexTest('Sort by stat - HP can be selected without dropping Pokemon', async ({ page }) => {
       await expect(pokemonListButtons(page).first()).toContainText('Bulbasaur');
       await page.getByRole('combobox').selectOption({ label: 'HP' });
@@ -401,6 +415,7 @@ test.describe('Pokemon Pokedex', () => {
       await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
       await expect(pokemonListButton(page, 10, 'Caterpie')).toBeVisible();
     });
+    // Verifies sorting preserves the currently selected game Pokedex filter.
     pokedexTest('Sorting does not clear an active game Pokedex filter', async ({ page }) => {
       await expect(pokemonListButton(page, 252, 'Treecko')).toBeVisible();
 
@@ -430,6 +445,7 @@ test.describe('Pokemon Pokedex', () => {
       await expect(page.getByText('Profile')).toBeVisible();
     });
 
+    // Verifies repeated Random actions always leave a populated valid detail view.
     pokedexTest('Repeated random clicks keep returning valid Pokemon details', async ({ page }) => {
       for (let clickCount = 0; clickCount < 3; clickCount += 1) {
         await page.getByRole('button', { name: /^random$/i }).click();
@@ -442,6 +458,7 @@ test.describe('Pokemon Pokedex', () => {
         await expect(page.getByText('Profile')).toBeVisible();
       }
     });
+    // Verifies a random result can be used as a search target and then cleared cleanly.
     pokedexTest('Random result can be searched or cleared afterward', async ({ page }) => {
       await page.getByRole('button', { name: /^random$/i }).click();
       const randomPokemon = await selectedPokemonIdentity(page);
@@ -465,6 +482,7 @@ test.describe('Pokemon Pokedex', () => {
 
       expect(new Set(visiblePokemonNames).size).toBe(visiblePokemonNames.length);
     });
+    // Verifies blank or whitespace-only search input validates without clearing current results.
     pokedexTest('Empty search submission keeps the current list stable', async ({ page }) => {
       await page.getByPlaceholder('Name or number...').fill(' ');
       await page.getByRole('button', { name: /^search$/i }).click();
@@ -472,6 +490,7 @@ test.describe('Pokemon Pokedex', () => {
       await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
       await expect(page.getByText('Please enter a valid Pokemon')).toBeVisible();
     });
+    // Verifies a very long unmatched term reaches the empty state without breaking controls.
     pokedexTest(
       'Very long search text shows no results without breaking the page',
       async ({ page }) => {
@@ -481,6 +500,7 @@ test.describe('Pokemon Pokedex', () => {
         await expect(page.getByText('Pokemon not found. Try a name')).toBeVisible();
       }
     );
+    // Verifies special-character input validates safely and preserves the default list.
     pokedexTest(
       'Special-character search text shows no results without breaking the page',
       async ({ page }) => {
@@ -490,6 +510,7 @@ test.describe('Pokemon Pokedex', () => {
         await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
       }
     );
+    // Verifies numeric values outside the supported Pokedex range show an empty state.
     pokedexTest('Out-of-range numeric search shows no results', async ({ page }) => {
       await page.getByPlaceholder('Name or number...').fill('99999');
       await page.getByRole('button', { name: /^search$/i }).click();
@@ -499,6 +520,7 @@ test.describe('Pokemon Pokedex', () => {
       await expect(page.getByRole('button', { name: /^search$/i })).toBeEnabled();
       await expect(page.getByRole('button', { name: /^random$/i })).toBeEnabled();
     });
+    // Verifies negative numeric input shows validation and does not clear visible Pokemon.
     pokedexTest(
       'Negative numeric search shows validation without clearing the list',
       async ({ page }) => {
@@ -510,6 +532,7 @@ test.describe('Pokemon Pokedex', () => {
         await expect(pokemonListButton(page, 10, 'Caterpie')).toBeVisible();
       }
     );
+    // Verifies Clear recovers the default list after an invalid search empties the results.
     pokedexTest('Clear after invalid search restores the default list', async ({ page }) => {
       await page.getByPlaceholder('Name or number...').fill('testing');
       await page.getByRole('button', { name: /^search$/i }).click();
@@ -523,6 +546,7 @@ test.describe('Pokemon Pokedex', () => {
       await expect(pokemonListButton(page, 25, 'Pikachu')).toBeVisible();
       await expect(page.getByText('No Pokemon match this Pokedex')).toBeHidden();
     });
+    // Verifies sorting an empty search result keeps the empty state and selected sort stable.
     pokedexTest(
       'Sort while search has no results keeps the empty state stable',
       async ({ page }) => {
@@ -537,6 +561,7 @@ test.describe('Pokemon Pokedex', () => {
         await expect(page.getByRole('combobox')).toHaveValue('name');
       }
     );
+    // Verifies searching outside an active region does not leak Pokemon from another Pokedex.
     pokedexTest(
       'Search outside the active region filter does not leak unrelated Pokemon',
       async ({ page }) => {
@@ -552,6 +577,7 @@ test.describe('Pokemon Pokedex', () => {
         await expect(pokemonListButtons(page)).toHaveCount(0);
       }
     );
+    // Verifies rapid Random clicks settle on a single usable detail panel.
     pokedexTest('Rapid Random clicks leave one valid detail view visible', async ({ page }) => {
       for (let clickCount = 0; clickCount < 5; clickCount += 1) {
         await page.getByRole('button', { name: /^random$/i }).click();
@@ -564,6 +590,7 @@ test.describe('Pokemon Pokedex', () => {
       await expect(page.getByText('Base Stats')).toBeVisible();
       await expect(page.getByText('Profile')).toBeVisible();
     });
+    // Verifies repeated search and clear cycles leave search and random controls usable.
     pokedexTest('Rapid Search and Clear actions leave controls usable', async ({ page }) => {
       const searchInput = page.getByPlaceholder('Name or number...');
       const searchButton = page.getByRole('button', { name: /^search$/i });
@@ -595,6 +622,7 @@ test.describe('Pokemon Pokedex', () => {
       await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
       await expect(pokemonListButton(page, 10, 'Caterpie')).toBeVisible();
     });
+    // Verifies Pokemon names with punctuation or spacing variants can open the correct profile.
     pokedexTest('Special-name Pokemon detail opens with the correct profile', async ({ page }) => {
       await page.getByPlaceholder('Name or number...').fill('Mr. Mime');
       await page.getByRole('button', { name: /^search$/i }).click();
@@ -609,6 +637,7 @@ test.describe('Pokemon Pokedex', () => {
       await expect(page.getByText(/Barrier Pok.mon/)).toBeVisible();
       await expect(page.getByRole('button', { name: 'Play Mr Mime cry' })).toBeVisible();
     });
+    // Verifies failed image requests do not prevent identity, stats, and controls from rendering.
     test('Missing or failed image loads show a stable fallback state', async ({ page }) => {
       await page.route('**/*.{png,jpg,jpeg,gif,webp}', (route) => route.abort());
       await page.route('**/raw.githubusercontent.com/PokeAPI/sprites/**', (route) => route.abort());

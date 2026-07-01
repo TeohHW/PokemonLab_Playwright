@@ -1,6 +1,45 @@
-# Playwright Workspace
+# Pokemon Lab Playwright Tests
 
-Production-ready starter workspace for testing any webpage with Playwright and TypeScript.
+Playwright + TypeScript test suite for my Pokemon Lab web app. This is a personal QA automation project I use to practise end-to-end testing outside work, with coverage across multiple interactive stations rather than only simple happy-path checks.
+
+The suite is written to be readable as a small portfolio project: tests are grouped by station and behavior, fixtures keep repetitive setup out of individual cases, and the scope includes negative, edge, and reliability scenarios where the app has meaningful state or async behavior.
+
+## Test Scope
+
+The app currently has five stations under test:
+
+| Station               | Spec                                    | Current coverage                                                                                                                                                                    |
+| --------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pokemon Pokedex       | `tests/specs/pokedex.spec.ts`           | Initial load, search, details, game Pokedex filters, sorting, random Pokemon, image fallback, and rapid action reliability                                                          |
+| Pokemon TCG Simulator | `tests/specs/tcg-simulator.spec.ts`     | Session startup, pack opening, pack modal behavior, binder progress, collection clearing, set selection, set filtering/sorting, and Pokemon/card search                             |
+| Who's That Pokemon    | `tests/specs/whos-that-pokemon.spec.ts` | Setup, trainer validation, region selection, gameplay, guessing flow, help choices, leaderboard handling, navigation, local storage reliability, and network/image failure behavior |
+| Pokemon Team Planner  | `tests/specs/team-planner.spec.ts`      | Station startup, Pokemon search, game Pokedex filtering, team selection, move/stat panels, navigation, six-Pokemon limit reliability, plus planned placeholder cases                |
+| Pokemon Quiz          | `tests/specs/pokemon-quiz.spec.ts`      | Station startup, quiz pool/category selection, playable questions, scoring panel updates, reset behavior, navigation, rapid-start reliability, plus planned placeholder cases       |
+
+Some newer station specs intentionally include `test.skip` placeholders. These are not meant to inflate the passing count; they document the intended coverage map so the remaining work is visible and organized.
+
+## Coverage Themes
+
+- Station entry and initial UI state from the shared home screen
+- Search behavior, including valid terms, invalid terms, casing, clearing, and numeric lookup
+- Filtering and sorting interactions, including combinations that should preserve active state
+- Detail views, modals, and selected item panels
+- State changes such as score updates, binder progress, team count, and leaderboard entries
+- Negative and edge cases such as empty input, special characters, out-of-range values, corrupted local storage, failed image requests, and delayed data
+- Reliability checks for rapid user actions such as repeated search/clear, random selection, help, guess, pack opening, and start/reset flows
+- Navigation back to the station chooser
+
+## Test Design Notes
+
+- Uses Playwright's role-based locators where practical, so tests follow the user-facing UI instead of brittle implementation details.
+- Uses station-level fixtures for repeated setup such as opening Pokedex, TCG Simulator, Team Planner, Pokemon Quiz, and Who's That Pokemon.
+- Keeps assertions focused on behavior that matters to users: visible controls, updated counters, stable state, and usable recovery after edge cases.
+- Separates completed tests from planned coverage with `test.skip`, making the suite useful both as automation and as a living checklist.
+- Runs across the configured Playwright projects: Chromium, Firefox, WebKit, and mobile Chrome.
+
+## Use of AI Tools
+
+AI tools, including Codex, were used as part of the workflow to improve efficiency while building this project. They helped with tasks such as drafting testcase ideas, refining Playwright locators, organizing coverage gaps, and updating documentation. The test direction, app understanding, review decisions, and final validation remain my own.
 
 ## Quick Start
 
@@ -14,7 +53,7 @@ npm.cmd test
 Set the target site in `.env`:
 
 ```env
-BASE_URL=https://example.com
+BASE_URL=https://your-pokemon-lab-url.example
 ```
 
 ## Common Commands
@@ -38,30 +77,12 @@ PowerShell may block the `npm` script shim on Windows. `npm.cmd` avoids that pol
 
 ```text
 tests/
-  fixtures/       Shared Playwright fixtures
-  pages/          Page objects
+  fixtures/       Shared Playwright fixtures and exports
+  pages/          Page objects, including the home station chooser
+  specs/          Station-focused end-to-end specs
   smoke/          Fast confidence tests
-  examples/       Copy-and-adapt tests for navigation and forms, ignored by default
+  examples/       Copy-and-adapt examples, ignored by default
   utils/          Small test utilities
 ```
 
-## Configuration
-
-`playwright.config.ts` reads:
-
-- `BASE_URL`: site under test, defaults to `https://example.com`
-- `HEADED`: set to `true` to run browsers visibly
-- `IGNORE_HTTPS_ERRORS`: set to `true` for local or test environments with invalid certs
-
 Reports and failure artifacts are written to `playwright-report/` and `test-results/`.
-
-## Writing Tests
-
-Use role-based locators when possible:
-
-```ts
-await page.getByRole('button', { name: 'Submit' }).click();
-await expect(page.getByRole('heading', { name: /welcome/i })).toBeVisible();
-```
-
-For a specific site, add page objects under `tests/pages/` and focused specs under `tests/`.
