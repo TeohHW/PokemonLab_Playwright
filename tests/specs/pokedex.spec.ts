@@ -2,6 +2,10 @@ import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/test';
 
 test.describe('Pokemon Pokedex', () => {
+  function escapeRegExp(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
   // Opens the Pokedex station from the home screen and waits for the list controls.
   async function openPokedex(page: Page) {
     await page.goto('/');
@@ -9,27 +13,143 @@ test.describe('Pokemon Pokedex', () => {
 
     await expect(page.getByPlaceholder('Name or number...')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole('button', { name: /^search$/i })).toBeEnabled();
+    await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible({ timeout: 30_000 });
   }
 
-  // Locates a Pokemon list entry by National Pokedex number and display name.
+  const pokedexTest = test.extend<{ openPokedexStation: void }>({
+    openPokedexStation: [
+      async ({ page }, use) => {
+        await openPokedex(page);
+        await use();
+      },
+      { auto: true }
+    ]
+  });
+
+  // Locates a Pokemon list entry while supporting both numbered and name-only list cards.
   function pokemonListButton(page: Page, pokedexNumber: number, pokemonName: string) {
     const paddedNumber = String(pokedexNumber).padStart(3, '0');
 
-    return page.getByRole('button', {
-      name: new RegExp(`#${paddedNumber}\\s*${pokemonName}`, 'i')
+    return page.locator('button.pokemon-list-item').filter({
+      hasText: new RegExp(`^(?:#${paddedNumber}\\s*)?${escapeRegExp(pokemonName)}$`, 'i')
     });
   }
 
-  // Locates visible Pokemon list entries, which include a National Pokedex number.
+  // Locates visible Pokemon list entries in the current results grid.
   function pokemonListButtons(page: Page) {
-    return page.getByRole('button', { name: /#\d{3}/ });
+    return page.locator('.pokemon-list-item');
+  }
+
+  // Clears the search field and waits until the default list has recovered from async updates.
+  async function clearPokemonSearch(page: Page) {
+    const searchInput = page.getByPlaceholder('Name or number...');
+    const clearButton = page.getByRole('button', { name: /^clear$/i });
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      await expect(clearButton).toBeEnabled();
+      await clearButton.click();
+
+      try {
+        await expect(searchInput).toHaveValue('', { timeout: 1_500 });
+        break;
+      } catch (error) {
+        if (attempt === 3) {
+          throw error;
+        }
+      }
+    }
+
+    await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible({ timeout: 30_000 });
+  }
+
+  // Reads the selected Pokemon identity from the populated detail panel.
+  async function selectedPokemonIdentity(page: Page) {
+    const selectedNumberText =
+      (await page
+        .locator('article')
+        .getByText(/#\d{3,4}/)
+        .first()
+        .textContent()) ?? '';
+    const selectedPokedexNumber = Number(selectedNumberText.replace(/\D/g, ''));
+    const playCryButton = page.getByRole('button', { name: /^Play .+ cry$/i });
+
+    await expect(playCryButton).toBeVisible();
+
+    const playCryLabel = await playCryButton.evaluate(
+      (button) => button.getAttribute('aria-label') ?? button.textContent ?? ''
+    );
+    const selectedPokemonName = playCryLabel.match(/^Play (.+) cry$/i)?.[1] ?? '';
+
+    expect(selectedPokedexNumber).toBeGreaterThan(0);
+    expect(selectedPokemonName).toBeTruthy();
+
+    return {
+      name: selectedPokemonName,
+      pokedexNumber: selectedPokedexNumber
+    };
+  }
+
+  // Reads the visible card image names from the Featured TCG Cards panel.
+  async function featuredTcgCardNames(page: Page) {
+    const featuredCardsHeading = page.getByRole('heading', { name: /featured tcg cards/i });
+
+    await expect(featuredCardsHeading).toBeVisible();
+    await expect
+      .poll(() =>
+        featuredCardsHeading.evaluate(
+          (heading) =>
+            [...document.querySelectorAll('button, [role="button"]')].filter(
+              (button) =>
+                Boolean(
+                  heading.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING
+                ) && Boolean(button.querySelector('img'))
+            ).length
+        )
+      )
+      .toBeGreaterThan(0);
+
+    return featuredCardsHeading.evaluate((heading) =>
+      [...document.querySelectorAll('button, [role="button"]')]
+        .filter(
+          (button) =>
+            Boolean(heading.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+            Boolean(button.querySelector('img'))
+        )
+        .map((button) => button.querySelector('img')?.getAttribute('alt') ?? '')
+    );
+  }
+
+  // Reads generation sprite image metadata from the selected Pokemon detail.
+  async function generationSpriteImages(page: Page) {
+    const generationSpritesHeading = page.getByRole('heading', { name: /generation sprites/i });
+
+    await expect(generationSpritesHeading).toBeVisible();
+    await expect
+      .poll(() =>
+        generationSpritesHeading.evaluate(
+          (heading) =>
+            heading.parentElement?.querySelectorAll('button img, [role="button"] img').length ?? 0
+        )
+      )
+      .toBeGreaterThan(0);
+
+    return generationSpritesHeading.evaluate((heading) =>
+      [...(heading.parentElement?.querySelectorAll('button img, [role="button"] img') ?? [])].map(
+        (image) => {
+          const spriteImage = image as HTMLImageElement;
+
+          return {
+            alt: spriteImage.getAttribute('alt') ?? '',
+            src: spriteImage.currentSrc || spriteImage.src
+          };
+        }
+      )
+    );
   }
 
   test.describe('Station / Initial Load', () => {
     // Verifies the Pokedex station opens with filters, search, sort, and the default list.
-    test('Starts Pokedex station', async ({ page }) => {
-      await openPokedex(page);
-
+    pokedexTest('Starts Pokedex station', async ({ page }) => {
       await expect(page.getByRole('button', { name: /^all games/i })).toBeVisible();
       await expect(page.getByPlaceholder('Name or number...')).toBeVisible();
       await expect(page.getByRole('button', { name: /^random$/i })).toBeVisible();
@@ -38,15 +158,51 @@ test.describe('Pokemon Pokedex', () => {
       await expect(pokemonListButton(page, 2, 'Ivysaur')).toBeVisible();
     });
 
-    test.skip('Shows a stable loading state before the Pokemon list is ready', async () => {});
-    test.skip('Menu returns from Pokedex station to the home station chooser', async () => {});
+    // Verifies the station shows a stable loading message while Pokemon data is delayed.
+    test('Shows a stable loading state before the Pokemon list is ready', async ({ page }) => {
+      let releasePokemonRequests!: () => void;
+      const pokemonRequestsCanContinue = new Promise<void>((resolve) => {
+        releasePokemonRequests = resolve;
+      });
+
+      await page.route('**/pokeapi.co/**', async (route) => {
+        await pokemonRequestsCanContinue;
+        await route.continue();
+      });
+
+      await page.goto('/');
+      await page.getByRole('button', { name: /search pokemon by name or number/i }).click();
+
+      await expect(page.getByText('Loading Pokemon...')).toBeVisible();
+      await expect(page.getByText(/Choose a Pokemon from All Games/i)).toBeVisible();
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeHidden();
+
+      releasePokemonRequests();
+
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByText('Loading Pokemon...')).toBeHidden();
+    });
+
+    // Verifies the station menu can return to the home station chooser.
+    pokedexTest(
+      'Menu returns from Pokedex station to the home station chooser',
+      async ({ page }) => {
+        await page.getByRole('button', { name: /^menu$/i }).click();
+        await expect(page.getByRole('button', { name: /^home$/i })).toBeVisible();
+        await page.getByRole('button', { name: /^home$/i }).click();
+
+        await expect(page.getByText(/choose your station/i)).toBeVisible();
+        await expect(page.getByRole('button', { name: /pokemon tcg simulator/i })).toBeVisible();
+        await expect(
+          page.getByRole('button', { name: /search pokemon by name or number/i })
+        ).toBeVisible();
+      }
+    );
   });
 
   test.describe('Search', () => {
     // Verifies searching by name filters the list to the matching Pokemon.
-    test('Search by Pokemon name', async ({ page }) => {
-      await openPokedex(page);
-
+    pokedexTest('Search by Pokemon name', async ({ page }) => {
       await page.getByPlaceholder('Name or number...').fill('pikachu');
       await page.getByRole('button', { name: /^search$/i }).click();
 
@@ -54,37 +210,129 @@ test.describe('Pokemon Pokedex', () => {
       await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeHidden();
     });
 
-    test.skip('Search by Pokedex number finds the matching Pokemon', async () => {});
-    test.skip('Search is case-insensitive and trims extra spaces', async () => {});
-    test.skip('Invalid search displays no results or an empty state', async () => {});
-    test.skip('Clear button resets search and restores the default list', async () => {});
-    test.skip('Pressing Enter in the search field submits the search', async () => {});
-  });
+    pokedexTest('Search by Pokedex number finds the matching Pokemon', async ({ page }) => {
+      await page.getByPlaceholder('Name or number...').fill('25');
+      await page.getByRole('button', { name: /^search$/i }).click();
 
+      await expect(pokemonListButton(page, 25, 'Pikachu')).toBeVisible();
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeHidden();
+    });
+    pokedexTest('Search is case-insensitive and trims extra spaces', async ({ page }) => {
+      await page.getByPlaceholder('Name or number...').fill('   PiKaChU   ');
+      await page.getByRole('button', { name: /^search$/i }).click();
+
+      await expect(pokemonListButton(page, 25, 'Pikachu')).toBeVisible();
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeHidden();
+    });
+    pokedexTest('Invalid search displays no results or an empty state', async ({ page }) => {
+      await page.getByPlaceholder('Name or number...').fill('testing');
+      await page.getByRole('button', { name: /^search$/i }).click();
+
+      await expect(page.getByText('Pokemon not found. Try a name')).toBeVisible();
+      await expect(page.getByText('No Pokemon match this Pokedex')).toBeVisible();
+    });
+    pokedexTest('Clear button resets search and restores the default list', async ({ page }) => {
+      await page.getByPlaceholder('Name or number...').fill('Pikachu');
+      await page.getByRole('button', { name: /^search$/i }).click();
+
+      await expect(pokemonListButton(page, 25, 'Pikachu')).toBeVisible();
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeHidden();
+      await clearPokemonSearch(page);
+    });
+    pokedexTest('Pressing Enter in the search field submits the search', async ({ page }) => {
+      await page.getByPlaceholder('Name or number...').fill('Pikachu');
+      await page.keyboard.press('Enter');
+
+      await expect(pokemonListButton(page, 25, 'Pikachu')).toBeVisible();
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeHidden();
+    });
+  });
   test.describe('Pokemon Details', () => {
     // Verifies selecting a Pokemon opens a detail panel with identity, type, and profile data.
-    test('Opens Pokemon detail view', async ({ page }) => {
-      await openPokedex(page);
-
+    pokedexTest('Opens Pokemon detail view', async ({ page }) => {
       await pokemonListButton(page, 25, 'Pikachu').click();
 
       await expect(page.getByRole('img', { name: 'pikachu', exact: true })).toBeVisible();
       await expect(page.getByText('#025').last()).toBeVisible();
       await expect(page.getByText('Pikachu').last()).toBeVisible();
-      await expect(page.getByText(/^Electric$/i)).toBeVisible();
+      await expect(page.locator('.type-badge').filter({ hasText: /^Electric$/i })).toBeVisible();
       await expect(page.getByText(/Mouse Pok.mon/)).toBeVisible();
       await expect(page.getByRole('button', { name: 'Play Pikachu cry' })).toBeVisible();
     });
+    // Verifies the featured TCG panel always shows cards corresponding to the pokemon searched
+    pokedexTest('Featured TCG cards belong to the random Pokemon detail', async ({ page }) => {
+      await page.getByRole('button', { name: /^random$/i }).click();
 
-    test.skip('Detail view can be closed or navigated away from without losing the list', async () => {});
-    test.skip('Detail view opened from search shows the correct selected Pokemon', async () => {});
-    test.skip('Pokemon detail images have valid image sources', async () => {});
+      const randomPokemon = await selectedPokemonIdentity(page);
+      await expect(page.getByText('FEATURED TCG CARDS')).toBeVisible();
+
+      const featuredCardNames = await featuredTcgCardNames(page);
+      expect(featuredCardNames.length).toBeGreaterThan(0);
+      const expectedCardNamePart = randomPokemon.name.toLowerCase().split(/\s+/)[0];
+
+      for (const featuredCardName of featuredCardNames) {
+        expect(featuredCardName.toLowerCase()).toContain(expectedCardNamePart);
+      }
+    });
+    pokedexTest(
+      'Detail view opened from search shows the correct selected Pokemon',
+      async ({ page }) => {
+        await page.getByPlaceholder('Name or number...').fill('pikachu');
+        await page.getByRole('button', { name: /^search$/i }).click();
+
+        await expect(pokemonListButton(page, 25, 'Pikachu')).toBeVisible();
+        await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeHidden();
+        await expect(page.locator('.type-badge').filter({ hasText: /^Electric$/i })).toBeVisible();
+        await expect(page.getByText(/Mouse Pok.mon/)).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Play Pikachu cry' })).toBeVisible();
+      }
+    );
+    pokedexTest('Pokemon detail images have valid image sources', async ({ page }) => {
+      await page.getByRole('button', { name: /^random$/i }).click();
+      const randomPokemon = await selectedPokemonIdentity(page);
+
+      const primaryDetailImage = page.locator('article img[src*="/official-artwork/"]').first();
+
+      await expect(primaryDetailImage).toBeVisible();
+      await expect(primaryDetailImage).toHaveAttribute(
+        'src',
+        new RegExp(`/official-artwork/${randomPokemon.pokedexNumber}\\.png$`)
+      );
+      await expect
+        .poll(() =>
+          primaryDetailImage.evaluate((image) => {
+            const detailImage = image as HTMLImageElement;
+
+            return detailImage.naturalWidth + detailImage.naturalHeight;
+          })
+        )
+        .toBeGreaterThan(0);
+    });
+    pokedexTest(
+      'Generation sprites have valid image sources for a random Pokemon',
+      async ({ page }) => {
+        await page.getByRole('button', { name: /^random$/i }).click();
+        await selectedPokemonIdentity(page);
+
+        const spriteImages = await generationSpriteImages(page);
+
+        expect(spriteImages.length).toBeGreaterThan(0);
+        for (const spriteImage of spriteImages) {
+          expect(spriteImage.alt).toMatch(/sprite/i);
+          expect(spriteImage.src).toMatch(
+            /^https:\/\/raw\.githubusercontent\.com\/PokeAPI\/sprites\/master\/sprites\/pokemon\/versions\/.+\.(png|gif)$/i
+          );
+          expect(spriteImage.src).not.toContain('undefined');
+          expect(spriteImage.src).not.toContain('null');
+        }
+      }
+    );
   });
-
   test.describe('Game Pokedex / Region Filters', () => {
     // Verifies selecting a game Pokedex restricts the visible list to that game range.
-    test('Kanto game Pokedex filter shows Kanto Pokemon', async ({ page }) => {
-      await openPokedex(page);
+    pokedexTest('Kanto game Pokedex filter shows Kanto Pokemon', async ({ page }) => {
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
+      await expect(pokemonListButton(page, 152, 'Chikorita')).toBeVisible();
 
       await page.getByRole('button', { name: /firered\s*\/\s*leafgreen/i }).click();
 
@@ -93,34 +341,88 @@ test.describe('Pokemon Pokedex', () => {
       await expect(pokemonListButton(page, 152, 'Chikorita')).toBeHidden();
     });
 
-    test.skip('Johto filter includes Johto starters and excludes non-listed Pokemon', async () => {});
-    test.skip('Hoenn filter includes Treecko, Torchic, and Mudkip', async () => {});
-    test.skip('All Games restores the full Pokedex list after a region filter', async () => {});
-    test.skip('Search and region filter work together predictably', async () => {});
+    pokedexTest(
+      'Johto filter includes Johto starters and excludes non-listed Pokemon',
+      async ({ page }) => {
+        await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
+        await page.getByRole('button', { name: 'HeartGold / SoulSilver Johto' }).click();
+        await expect(pokemonListButton(page, 152, 'Chikorita')).toBeVisible();
+        await expect(pokemonListButton(page, 155, 'Cyndaquil')).toBeVisible();
+        await expect(pokemonListButton(page, 252, 'Treecko')).toBeHidden();
+      }
+    );
+    pokedexTest('Hoenn filter includes Treecko, Torchic, and Mudkip', async ({ page }) => {
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
+      await page.getByRole('button', { name: 'Ruby / Sapphire / Emerald' }).click();
+      await expect(pokemonListButton(page, 152, 'Chikorita')).toBeHidden();
+      await expect(pokemonListButton(page, 155, 'Cyndaquil')).toBeHidden();
+      await expect(pokemonListButton(page, 252, 'Treecko')).toBeVisible();
+      await expect(pokemonListButton(page, 255, 'Torchic')).toBeVisible();
+      await expect(pokemonListButton(page, 258, 'Mudkip')).toBeVisible();
+    });
+    pokedexTest(
+      'All Games restores the full Pokedex list after a region filter',
+      async ({ page }) => {
+        await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
+        await page.getByRole('button', { name: 'Ruby / Sapphire / Emerald' }).click();
+        await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeHidden();
+        await page.getByRole('button', { name: 'All Games Every listed Pokedex' }).click();
+        await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
+      }
+    );
   });
 
   test.describe('Sorting', () => {
     // Verifies sort controls reorder the Pokemon list.
-    test('Sort by name reorders Pokemon alphabetically', async ({ page }) => {
-      await openPokedex(page);
-
+    pokedexTest('Sort by name reorders Pokemon alphabetically', async ({ page }) => {
       await page.getByRole('combobox').selectOption({ label: 'Name' });
 
       await expect(pokemonListButtons(page).first()).not.toContainText('Bulbasaur');
       await expect(pokemonListButtons(page).first()).toContainText(/Abomasnow|Abra/i);
     });
 
-    test.skip('Sort by Pokedex Number restores numerical order', async () => {});
-    test.skip('Sort by Type groups Pokemon by type', async () => {});
-    test.skip('Sort by stat changes the leading result', async () => {});
-    test.skip('Sorting does not clear an active game Pokedex filter', async () => {});
+    pokedexTest('Sort by Pokedex Number restores numerical order', async ({ page }) => {
+      await page.getByRole('combobox').selectOption({ label: 'Name' });
+      await expect(pokemonListButtons(page).first()).not.toContainText('Bulbasaur');
+      await page.getByRole('combobox').selectOption({ label: 'Pokedex Number' });
+      await expect(pokemonListButtons(page).first()).toContainText('Bulbasaur');
+    });
+    pokedexTest('Sort by Type can be selected without dropping Pokemon', async ({ page }) => {
+      await expect(pokemonListButtons(page).first()).toContainText('Bulbasaur');
+      await page.getByRole('combobox').selectOption({ label: 'Type' });
+      await expect(page.getByRole('combobox')).toHaveValue('type');
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
+      await expect(pokemonListButton(page, 10, 'Caterpie')).toBeVisible();
+    });
+    pokedexTest('Sort by stat - HP can be selected without dropping Pokemon', async ({ page }) => {
+      await expect(pokemonListButtons(page).first()).toContainText('Bulbasaur');
+      await page.getByRole('combobox').selectOption({ label: 'HP' });
+      await expect(page.getByRole('combobox')).toHaveValue('stat-hp');
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
+      await expect(pokemonListButton(page, 10, 'Caterpie')).toBeVisible();
+    });
+    pokedexTest('Sorting does not clear an active game Pokedex filter', async ({ page }) => {
+      await expect(pokemonListButton(page, 252, 'Treecko')).toBeVisible();
+
+      await page.getByRole('button', { name: /ruby\s*\/\s*sapphire\s*\/\s*emerald/i }).click();
+
+      await expect(pokemonListButton(page, 252, 'Treecko')).toBeVisible();
+      await expect(pokemonListButton(page, 255, 'Torchic')).toBeVisible();
+      await expect(pokemonListButton(page, 258, 'Mudkip')).toBeVisible();
+      await expect(pokemonListButton(page, 152, 'Chikorita')).toBeHidden();
+
+      await page.getByRole('combobox').selectOption({ label: 'Name' });
+
+      await expect(pokemonListButton(page, 252, 'Treecko')).toBeVisible();
+      await expect(pokemonListButton(page, 255, 'Torchic')).toBeVisible();
+      await expect(pokemonListButton(page, 258, 'Mudkip')).toBeVisible();
+      await expect(pokemonListButton(page, 152, 'Chikorita')).toBeHidden();
+    });
   });
 
   test.describe('Random', () => {
     // Verifies Random selects a valid Pokemon and opens a populated detail view.
-    test('Random opens a valid Pokemon detail', async ({ page }) => {
-      await openPokedex(page);
-
+    pokedexTest('Random opens a valid Pokemon detail', async ({ page }) => {
       await page.getByRole('button', { name: /^random$/i }).click();
 
       await expect(page.getByText(/#\d{3}/).last()).toBeVisible();
@@ -128,24 +430,210 @@ test.describe('Pokemon Pokedex', () => {
       await expect(page.getByText('Profile')).toBeVisible();
     });
 
-    test.skip('Repeated random clicks keep returning valid Pokemon details', async () => {});
-    test.skip('Random result can be searched or cleared afterward', async () => {});
+    pokedexTest('Repeated random clicks keep returning valid Pokemon details', async ({ page }) => {
+      for (let clickCount = 0; clickCount < 3; clickCount += 1) {
+        await page.getByRole('button', { name: /^random$/i }).click();
+
+        const randomPokemon = await selectedPokemonIdentity(page);
+
+        expect(randomPokemon.pokedexNumber).toBeGreaterThan(0);
+        expect(randomPokemon.name).toBeTruthy();
+        await expect(page.getByText('Base Stats')).toBeVisible();
+        await expect(page.getByText('Profile')).toBeVisible();
+      }
+    });
+    pokedexTest('Random result can be searched or cleared afterward', async ({ page }) => {
+      await page.getByRole('button', { name: /^random$/i }).click();
+      const randomPokemon = await selectedPokemonIdentity(page);
+
+      await page.getByPlaceholder('Name or number...').fill(String(randomPokemon.pokedexNumber));
+      await page.getByRole('button', { name: /^search$/i }).click();
+
+      await expect(
+        pokemonListButton(page, randomPokemon.pokedexNumber, randomPokemon.name)
+      ).toBeVisible();
+      await clearPokemonSearch(page);
+    });
   });
 
   test.describe('Edge / Reliability', () => {
     // Verifies the visible Pokemon list does not render duplicate entries.
-    test('Visible Pokemon list has no duplicate entries', async ({ page }) => {
-      await openPokedex(page);
-
+    pokedexTest('Visible Pokemon list has no duplicate entries', async ({ page }) => {
       const visiblePokemonNames = await pokemonListButtons(page).evaluateAll((buttons) =>
         buttons.map((button) => button.textContent?.trim() ?? '')
       );
 
       expect(new Set(visiblePokemonNames).size).toBe(visiblePokemonNames.length);
     });
+    pokedexTest('Empty search submission keeps the current list stable', async ({ page }) => {
+      await page.getByPlaceholder('Name or number...').fill(' ');
+      await page.getByRole('button', { name: /^search$/i }).click();
+      await expect(pokemonListButton(page, 25, 'Pikachu')).toBeVisible();
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
+      await expect(page.getByText('Please enter a valid Pokemon')).toBeVisible();
+    });
+    pokedexTest(
+      'Very long search text shows no results without breaking the page',
+      async ({ page }) => {
+        await page.getByPlaceholder('Name or number...').fill('QWERTYUIOPASDFGHJKLZXCVBNM');
+        await page.getByRole('button', { name: /^search$/i }).click();
+        await expect(page.getByText('No Pokemon match this Pokedex')).toBeVisible();
+        await expect(page.getByText('Pokemon not found. Try a name')).toBeVisible();
+      }
+    );
+    pokedexTest(
+      'Special-character search text shows no results without breaking the page',
+      async ({ page }) => {
+        await page.getByPlaceholder('Name or number...').fill('!@#$%');
+        await page.getByRole('button', { name: /^search$/i }).click();
+        await expect(page.getByText('Please enter a valid Pokemon')).toBeVisible();
+        await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
+      }
+    );
+    pokedexTest('Out-of-range numeric search shows no results', async ({ page }) => {
+      await page.getByPlaceholder('Name or number...').fill('99999');
+      await page.getByRole('button', { name: /^search$/i }).click();
 
-    test.skip('Special-name Pokemon can be found from search', async () => {});
-    test.skip('Pokemon list card images have valid sources when visible', async () => {});
-    test.skip('Search handles leading and trailing spaces', async () => {});
+      await expect(page.getByText('No Pokemon match this Pokedex')).toBeVisible();
+      await expect(pokemonListButtons(page)).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /^search$/i })).toBeEnabled();
+      await expect(page.getByRole('button', { name: /^random$/i })).toBeEnabled();
+    });
+    pokedexTest(
+      'Negative numeric search shows validation without clearing the list',
+      async ({ page }) => {
+        await page.getByPlaceholder('Name or number...').fill('-1');
+        await page.getByRole('button', { name: /^search$/i }).click();
+
+        await expect(page.getByText('Please enter a valid Pokemon')).toBeVisible();
+        await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
+        await expect(pokemonListButton(page, 10, 'Caterpie')).toBeVisible();
+      }
+    );
+    pokedexTest('Clear after invalid search restores the default list', async ({ page }) => {
+      await page.getByPlaceholder('Name or number...').fill('testing');
+      await page.getByRole('button', { name: /^search$/i }).click();
+
+      await expect(page.getByText('No Pokemon match this Pokedex')).toBeVisible();
+      await expect(pokemonListButtons(page)).toHaveCount(0);
+
+      await clearPokemonSearch(page);
+
+      await expect(page.getByPlaceholder('Name or number...')).toHaveValue('');
+      await expect(pokemonListButton(page, 25, 'Pikachu')).toBeVisible();
+      await expect(page.getByText('No Pokemon match this Pokedex')).toBeHidden();
+    });
+    pokedexTest(
+      'Sort while search has no results keeps the empty state stable',
+      async ({ page }) => {
+        await page.getByPlaceholder('Name or number...').fill('testing');
+        await page.getByRole('button', { name: /^search$/i }).click();
+        await expect(page.getByText('No Pokemon match this Pokedex')).toBeVisible();
+
+        await page.getByRole('combobox').selectOption({ label: 'Name' });
+
+        await expect(page.getByText('No Pokemon match this Pokedex')).toBeVisible();
+        await expect(pokemonListButtons(page)).toHaveCount(0);
+        await expect(page.getByRole('combobox')).toHaveValue('name');
+      }
+    );
+    pokedexTest(
+      'Search outside the active region filter does not leak unrelated Pokemon',
+      async ({ page }) => {
+        await page.getByRole('button', { name: /firered\s*\/\s*leafgreen/i }).click();
+        await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
+        await expect(pokemonListButton(page, 152, 'Chikorita')).toBeHidden();
+
+        await page.getByPlaceholder('Name or number...').fill('Chikorita');
+        await page.getByRole('button', { name: /^search$/i }).click();
+
+        await expect(page.getByText('No Pokemon match this Pokedex')).toBeVisible();
+        await expect(pokemonListButton(page, 152, 'Chikorita')).toBeHidden();
+        await expect(pokemonListButtons(page)).toHaveCount(0);
+      }
+    );
+    pokedexTest('Rapid Random clicks leave one valid detail view visible', async ({ page }) => {
+      for (let clickCount = 0; clickCount < 5; clickCount += 1) {
+        await page.getByRole('button', { name: /^random$/i }).click();
+      }
+
+      const randomPokemon = await selectedPokemonIdentity(page);
+
+      expect(randomPokemon.pokedexNumber).toBeGreaterThan(0);
+      await expect(page.getByRole('button', { name: /^Play .+ cry$/i })).toHaveCount(1);
+      await expect(page.getByText('Base Stats')).toBeVisible();
+      await expect(page.getByText('Profile')).toBeVisible();
+    });
+    pokedexTest('Rapid Search and Clear actions leave controls usable', async ({ page }) => {
+      const searchInput = page.getByPlaceholder('Name or number...');
+      const searchButton = page.getByRole('button', { name: /^search$/i });
+
+      const searchCases = [
+        {
+          term: 'Pikachu',
+          settled: () => expect(pokemonListButton(page, 25, 'Pikachu')).toBeVisible()
+        },
+        {
+          term: 'testing',
+          settled: () => expect(page.getByText('No Pokemon match this Pokedex')).toBeVisible()
+        },
+        {
+          term: 'Bulbasaur',
+          settled: () => expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible()
+        }
+      ];
+
+      for (const searchCase of searchCases) {
+        await searchInput.fill(searchCase.term);
+        await searchButton.click();
+        await searchCase.settled();
+        await clearPokemonSearch(page);
+      }
+
+      await expect(searchButton).toBeEnabled();
+      await expect(page.getByRole('button', { name: /^random$/i })).toBeEnabled();
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
+      await expect(pokemonListButton(page, 10, 'Caterpie')).toBeVisible();
+    });
+    pokedexTest('Special-name Pokemon detail opens with the correct profile', async ({ page }) => {
+      await page.getByPlaceholder('Name or number...').fill('Mr. Mime');
+      await page.getByRole('button', { name: /^search$/i }).click();
+
+      await expect(pokemonListButton(page, 122, 'Mr Mime')).toBeVisible();
+      await pokemonListButton(page, 122, 'Mr Mime').click();
+
+      await expect(page.getByText('#122').last()).toBeVisible();
+      await expect(page.getByText('Mr Mime').last()).toBeVisible();
+      await expect(page.locator('.type-badge').filter({ hasText: /^Psychic$/i })).toBeVisible();
+      await expect(page.locator('.type-badge').filter({ hasText: /^Fairy$/i })).toBeVisible();
+      await expect(page.getByText(/Barrier Pok.mon/)).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Play Mr Mime cry' })).toBeVisible();
+    });
+    test('Missing or failed image loads show a stable fallback state', async ({ page }) => {
+      await page.route('**/*.{png,jpg,jpeg,gif,webp}', (route) => route.abort());
+      await page.route('**/raw.githubusercontent.com/PokeAPI/sprites/**', (route) => route.abort());
+
+      await openPokedex(page);
+
+      await page.getByPlaceholder('Name or number...').fill('Pikachu');
+      await page.getByRole('button', { name: /^search$/i }).click();
+
+      await expect(pokemonListButton(page, 25, 'Pikachu')).toBeVisible();
+      await expect(page.getByText('#025').last()).toBeVisible();
+      await expect(page.getByText('Pikachu').last()).toBeVisible();
+      await expect(page.locator('.type-badge').filter({ hasText: /^Electric$/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Play Pikachu cry' })).toBeVisible();
+      await expect(page.getByText('Base Stats')).toBeVisible();
+      await expect(page.getByText('Profile')).toBeVisible();
+
+      const failedImages = await page
+        .locator('img')
+        .evaluateAll(
+          (images) =>
+            images.filter((image) => (image as HTMLImageElement).naturalWidth === 0).length
+        );
+
+      expect(failedImages).toBeGreaterThan(0);
+    });
   });
 });

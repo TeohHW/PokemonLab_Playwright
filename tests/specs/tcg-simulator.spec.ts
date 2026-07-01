@@ -1,25 +1,36 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { test, expect } from '../fixtures/test';
 
 test.describe('Pokemon TCG Simulator', () => {
-  // Starts each test with a clean persisted collection so cases stay independent.
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.evaluate(() => {
-      localStorage.removeItem('pokemon-pack-simulator-collection');
-    });
-  });
+  function openOnePackButton(page: Page): Locator {
+    return page.getByRole('button', { name: /^open 1 pack$/i });
+  }
 
   // Enters the simulator from the landing page and waits until pack controls are usable.
   async function openTcgSimulator(page: Page) {
     await page.goto('/');
     await page.getByRole('button', { name: /pokemon tcg simulator/i }).click();
 
-    const openOnePackButton = page.getByRole('button', { name: /^open 1 pack$/i });
-    await expect(openOnePackButton).toBeEnabled({ timeout: 30_000 });
+    const packButton = openOnePackButton(page);
+    await expect(packButton).toBeEnabled({ timeout: 30_000 });
 
-    return openOnePackButton;
+    return packButton;
   }
+
+  const tcgTest = test.extend<{ openTcgSimulatorStation: void }>({
+    openTcgSimulatorStation: [
+      async ({ page }, use) => {
+        await page.goto('/');
+        await page.evaluate(() => {
+          localStorage.removeItem('pokemon-pack-simulator-collection');
+        });
+        await page.getByRole('button', { name: /pokemon tcg simulator/i }).click();
+        await expect(openOnePackButton(page)).toBeEnabled({ timeout: 30_000 });
+        await use();
+      },
+      { auto: true }
+    ]
+  });
 
   // Locates the currently opened pack modal by looking for the revealed-card grid inside it.
   function packDialog(page: Page) {
@@ -28,9 +39,10 @@ test.describe('Pokemon TCG Simulator', () => {
 
   // Opens the default Base pack and verifies the expected 10-card modal is ready.
   async function openDefaultPack(page: Page) {
-    const openOnePackButton = await openTcgSimulator(page);
+    const packButton = openOnePackButton(page);
 
-    await openOnePackButton.click();
+    await expect(packButton).toBeEnabled({ timeout: 30_000 });
+    await packButton.click();
     await expect(packDialog(page)).toBeVisible();
     await expectRevealedCardsWithImageSrc(page, 10);
 
@@ -160,9 +172,26 @@ test.describe('Pokemon TCG Simulator', () => {
   }
 
   // Locates one expansion-set tile by its accessible button name.
-  function expansionSetButton(page: Page, setName: string, seriesName: string, releaseYear: number) {
+  function expansionSetButton(
+    page: Page,
+    setName: string,
+    seriesName: string,
+    releaseYear: number
+  ) {
     return page.getByRole('button', {
       name: new RegExp(`${setName}\\s+${seriesName}\\s+${releaseYear}`, 'i')
+    });
+  }
+
+  // Locates the shared top search that supports both expansion names and Pokemon names.
+  function expansionSearchInput(page: Page) {
+    return page.getByRole('textbox').first();
+  }
+
+  // Locates one Pokemon card search result by card name and expansion set.
+  function pokemonCardResultButton(page: Page, cardName: string, setName: string) {
+    return page.getByRole('button', {
+      name: new RegExp(`${cardName}\\s+${setName}`, 'i')
     });
   }
 
@@ -174,13 +203,13 @@ test.describe('Pokemon TCG Simulator', () => {
   test.describe('TCG simulator station', () => {
     test.describe('Session', () => {
       // Verifies the simulator opens with default Base controls and an empty binder.
-      test('Starts a new session', async ({ page }) => {
-        const openOnePackButton = await openTcgSimulator(page);
+      tcgTest('Starts a new session', async ({ page }) => {
+        const packButton = openOnePackButton(page);
 
         await expect(page.getByRole('button', { name: /^base$/i })).toBeEnabled();
         await expect(page.getByRole('button', { name: /^open 10 packs$/i })).toBeEnabled();
         await expect(page.getByRole('button', { name: /^open random pack$/i })).toBeEnabled();
-        await expect(openOnePackButton).toBeEnabled();
+        await expect(packButton).toBeEnabled();
         expect(await getCollectionProgress(page, 'Base', 102)).toBe(0);
         await expect(page.getByRole('heading', { name: /^binder$/i })).toBeVisible();
       });
@@ -188,7 +217,7 @@ test.describe('Pokemon TCG Simulator', () => {
 
     test.describe('Pack opening', () => {
       // Verifies a single default Base pack reveals 10 cards and updates binder progress.
-      test('Opens default pack - Base', async ({ page }) => {
+      tcgTest('Opens default pack - Base', async ({ page }) => {
         await openDefaultPack(page);
 
         const newBadges = page.locator('.new-card-badge');
@@ -205,9 +234,7 @@ test.describe('Pokemon TCG Simulator', () => {
       });
 
       // Verifies the multi-pack action reveals 100 cards and enables binder clearing.
-      test('Open 10 packs', async ({ page }) => {
-        await openTcgSimulator(page);
-
+      tcgTest('Open 10 packs', async ({ page }) => {
         await page.getByRole('button', { name: /^open 10 packs$/i }).click();
 
         await expect(page.locator('.pack-grid')).toBeVisible();
@@ -218,9 +245,7 @@ test.describe('Pokemon TCG Simulator', () => {
       });
 
       // Verifies a god pack reveals 10 cards and every revealed card is marked holo.
-      test('Open god pack', async ({ page }) => {
-        await openTcgSimulator(page);
-
+      tcgTest('Open god pack', async ({ page }) => {
         await page.getByRole('button', { name: /^open god pack$/i }).click();
 
         const openedPack = page.locator('.pack-grid');
@@ -230,9 +255,7 @@ test.describe('Pokemon TCG Simulator', () => {
       });
 
       // Verifies a god pack still contributes unique cards to the selected binder.
-      test('Open god pack updates binder progress', async ({ page }) => {
-        await openTcgSimulator(page);
-
+      tcgTest('Open god pack updates binder progress', async ({ page }) => {
         await page.getByRole('button', { name: /^open god pack$/i }).click();
         await expectRevealedCardsWithImageSrc(page, 10);
         await page.getByRole('button', { name: /^close$/i }).click();
@@ -243,9 +266,7 @@ test.describe('Pokemon TCG Simulator', () => {
       });
 
       // Verifies the random-pack action opens a pack with a visible set logo and 10 cards.
-      test('Open random pack', async ({ page }) => {
-        await openTcgSimulator(page);
-
+      tcgTest('Open random pack', async ({ page }) => {
         await page.getByRole('button', { name: /^open random pack$/i }).click();
 
         await expect(page.locator('.pack-grid')).toBeVisible();
@@ -255,22 +276,21 @@ test.describe('Pokemon TCG Simulator', () => {
       });
 
       // Verifies random-pack pulls are stored against the actual random set that opened.
-      test('Open random pack stores cards for the opened set', async ({ page }) => {
-        await openTcgSimulator(page);
-
+      tcgTest('Open random pack stores cards for the opened set', async ({ page }) => {
         await page.getByRole('button', { name: /^open random pack$/i }).click();
 
-        const openedSetName = ((await page.locator('.pack-set-logo').getAttribute('alt')) ?? '').replace(
-          /\s+logo$/i,
-          ''
-        );
+        const openedSetName = (
+          (await page.locator('.pack-set-logo').getAttribute('alt')) ?? ''
+        ).replace(/\s+logo$/i, '');
         expect(openedSetName).toBeTruthy();
 
         await page.getByRole('button', { name: /^close$/i }).click();
 
         // The visible binder stays on Base, so persisted collection data is the source of truth here.
         const storedSetNames = await page.evaluate(() => {
-          const collection = JSON.parse(localStorage.getItem('pokemon-pack-simulator-collection') ?? '{}');
+          const collection = JSON.parse(
+            localStorage.getItem('pokemon-pack-simulator-collection') ?? '{}'
+          );
 
           return [
             ...new Set(
@@ -285,7 +305,7 @@ test.describe('Pokemon TCG Simulator', () => {
 
     test.describe('Pack modal', () => {
       // Verifies the modal close action removes both the dialog and the pack grid.
-      test('Close hides the pack modal and grid', async ({ page }) => {
+      tcgTest('Close hides the pack modal and grid', async ({ page }) => {
         const dialog = await openDefaultPack(page);
 
         await page.getByRole('button', { name: /^close$/i }).click();
@@ -297,9 +317,7 @@ test.describe('Pokemon TCG Simulator', () => {
 
     test.describe('Binder', () => {
       // Verifies Base and Fossil progress are tracked independently as packs are opened.
-      test('Binder collection update for selected set', async ({ page }) => {
-        await openTcgSimulator(page);
-
+      tcgTest('Binder collection update for selected set', async ({ page }) => {
         expect(await getCollectionProgress(page, 'Base', 102)).toBe(0);
 
         await page.getByRole('button', { name: /fossil/i }).click();
@@ -332,12 +350,13 @@ test.describe('Pokemon TCG Simulator', () => {
         expect(await getCollectionProgress(page, 'Base', 102)).toBe(baseProgressAfterOpeningPacks);
 
         await page.getByRole('button', { name: /fossil/i }).click();
-        expect(await getCollectionProgress(page, 'Fossil', 62)).toBe(fossilProgressAfterOpeningPacks);
+        expect(await getCollectionProgress(page, 'Fossil', 62)).toBe(
+          fossilProgressAfterOpeningPacks
+        );
       });
 
       // Verifies a fully seeded Base binder remains capped after opening more packs.
-      test('Base binder progress never exceeds total unique cards', async ({ page }) => {
-        await openTcgSimulator(page);
+      tcgTest('Base binder progress never exceeds total unique cards', async ({ page }) => {
         // Seed all Base cards directly to avoid relying on random pulls to complete the set.
         await seedFullBaseBinder(page);
         await page.reload();
@@ -353,8 +372,7 @@ test.describe('Pokemon TCG Simulator', () => {
       });
 
       // Verifies unique progress stays capped even after opening another pack from a full binder.
-      test('Collection does not exceed total unique cards', async ({ page }) => {
-        await openTcgSimulator(page);
+      tcgTest('Collection does not exceed total unique cards', async ({ page }) => {
         // Start at the exact collection cap so any overflow would be visible immediately.
         await seedFullBaseBinder(page);
         await page.reload();
@@ -369,7 +387,7 @@ test.describe('Pokemon TCG Simulator', () => {
       });
 
       // Verifies confirming "Clear This Binder" resets only the selected Base binder.
-      test('Clear binder collection - Base', async ({ page }) => {
+      tcgTest('Clear binder collection - Base', async ({ page }) => {
         await openDefaultPack(page);
         await page.getByRole('button', { name: /^close$/i }).click();
 
@@ -392,7 +410,7 @@ test.describe('Pokemon TCG Simulator', () => {
       });
 
       // Verifies canceling the selected-binder clear dialog preserves Base progress.
-      test('Cancel clear binder leaves selected binder unchanged', async ({ page }) => {
+      tcgTest('Cancel clear binder leaves selected binder unchanged', async ({ page }) => {
         await openDefaultPack(page);
         await page.getByRole('button', { name: /^close$/i }).click();
 
@@ -411,8 +429,7 @@ test.describe('Pokemon TCG Simulator', () => {
       });
 
       // Verifies "Clear This Binder" affects one set, then "Clear All Binders" removes every set.
-      test('Clear all binders', async ({ page }) => {
-        await openTcgSimulator(page);
+      tcgTest('Clear all binders', async ({ page }) => {
         // Seed two sets so the test can prove single-binder and all-binder clearing differ.
         await seedBaseAndFossilBinders(page);
         await page.reload();
@@ -453,8 +470,7 @@ test.describe('Pokemon TCG Simulator', () => {
       });
 
       // Verifies canceling the all-binders dialog preserves progress across multiple binders.
-      test('Cancel clear all binders leaves every binder unchanged', async ({ page }) => {
-        await openTcgSimulator(page);
+      tcgTest('Cancel clear all binders leaves every binder unchanged', async ({ page }) => {
         // Use deterministic seeded cards so both Base and Fossil have known progress.
         await seedBaseAndFossilBinders(page);
         await page.reload();
@@ -476,26 +492,26 @@ test.describe('Pokemon TCG Simulator', () => {
       });
 
       // Verifies binder progress survives closing the page and opening a new page in the same context.
-      test('Opening a pack persists binder progress after closing and reopening the page', async ({
-        context,
-        page
-      }) => {
-        await openDefaultPack(page);
-        await page.getByRole('button', { name: /^close$/i }).click();
+      tcgTest(
+        'Opening a pack persists binder progress after closing and reopening the page',
+        async ({ context, page }) => {
+          await openDefaultPack(page);
+          await page.getByRole('button', { name: /^close$/i }).click();
 
-        const baseProgress = await getCollectionProgress(page, 'Base', 102);
-        expect(baseProgress).toBeGreaterThan(0);
+          const baseProgress = await getCollectionProgress(page, 'Base', 102);
+          expect(baseProgress).toBeGreaterThan(0);
 
-        await page.close();
-        // A new page in the same browser context should still see the persisted localStorage collection.
-        const reloadedPage = await context.newPage();
-        await openTcgSimulator(reloadedPage);
+          await page.close();
+          // A new page in the same browser context should still see the persisted localStorage collection.
+          const reloadedPage = await context.newPage();
+          await openTcgSimulator(reloadedPage);
 
-        expect(await getCollectionProgress(reloadedPage, 'Base', 102)).toBe(baseProgress);
-      });
+          expect(await getCollectionProgress(reloadedPage, 'Base', 102)).toBe(baseProgress);
+        }
+      );
 
       // Verifies cleared binder progress remains cleared after a reload.
-      test('Cleared binder stays cleared after reload', async ({ page }) => {
+      tcgTest('Cleared binder stays cleared after reload', async ({ page }) => {
         await openDefaultPack(page);
         await page.getByRole('button', { name: /^close$/i }).click();
 
@@ -509,21 +525,21 @@ test.describe('Pokemon TCG Simulator', () => {
       });
 
       // Verifies duplicate copies increase owned count while unique-card progress counts only one card.
-      test('Duplicate cards increase owned count without increasing unique progress', async ({ page }) => {
-        await openTcgSimulator(page);
-        // Seed one Base card with count 2 to separate "owned copies" from unique progress.
-        await seedDuplicatedBaseCard(page);
-        await page.reload();
-        await page.getByRole('button', { name: /pokemon tcg simulator/i }).click();
+      tcgTest(
+        'Duplicate cards increase owned count without increasing unique progress',
+        async ({ page }) => {
+          // Seed one Base card with count 2 to separate "owned copies" from unique progress.
+          await seedDuplicatedBaseCard(page);
+          await page.reload();
+          await page.getByRole('button', { name: /pokemon tcg simulator/i }).click();
 
-        expect(await getCollectionProgress(page, 'Base', 102)).toBe(1);
-        await expect(page.getByLabel('Collection binder')).toContainText(/AbraOwned x 2/);
-      });
+          expect(await getCollectionProgress(page, 'Base', 102)).toBe(1);
+          await expect(page.getByLabel('Collection binder')).toContainText(/AbraOwned x 2/);
+        }
+      );
 
       // Verifies binder-card search filters the card list within the selected set.
-      test('Binder card search filters cards within selected set', async ({ page }) => {
-        await openTcgSimulator(page);
-
+      tcgTest('Binder card search filters cards within selected set', async ({ page }) => {
         await page.getByPlaceholder('Search Pokemon in this set...').fill('pika');
 
         await expect(page.getByText('PIKACHU')).toBeVisible();
@@ -531,9 +547,7 @@ test.describe('Pokemon TCG Simulator', () => {
       });
 
       // Verifies invalid binder-card search hides card rows without affecting binder progress.
-      test('Binder card search invalid term shows no cards', async ({ page }) => {
-        await openTcgSimulator(page);
-
+      tcgTest('Binder card search invalid term shows no cards', async ({ page }) => {
         await page.getByPlaceholder('Search Pokemon in this set...').fill('not-a-card');
 
         await expect(page.getByText('PIKACHU')).toBeHidden();
@@ -542,9 +556,7 @@ test.describe('Pokemon TCG Simulator', () => {
       });
 
       // Verifies clearing binder-card search restores the selected set's full card list.
-      test('Clearing binder card search restores all binder cards', async ({ page }) => {
-        await openTcgSimulator(page);
-
+      tcgTest('Clearing binder card search restores all binder cards', async ({ page }) => {
         await page.getByPlaceholder('Search Pokemon in this set...').fill('pika');
         await expect(page.getByText('PIKACHU')).toBeVisible();
         await expect(page.getByText('ABRA')).toBeHidden();
@@ -558,9 +570,7 @@ test.describe('Pokemon TCG Simulator', () => {
 
     test.describe('Set selection', () => {
       // Verifies choosing Jungle updates the binder and opens a Jungle pack.
-      test('Select set by name', async ({ page }) => {
-        await openTcgSimulator(page);
-
+      tcgTest('Select set by name', async ({ page }) => {
         await page.getByRole('button', { name: /jungle/i }).click();
 
         expect(await getCollectionProgress(page, 'Jungle', 64)).toBe(0);
@@ -573,9 +583,7 @@ test.describe('Pokemon TCG Simulator', () => {
       });
 
       // Verifies sort options reorder the visible expansion-set tiles.
-      test('Sort sets by newest and by name', async ({ page }) => {
-        await openTcgSimulator(page);
-
+      tcgTest('Sort sets by newest and by name', async ({ page }) => {
         // Newest-first should surface a 2026 set before older releases.
         await page.getByRole('combobox').selectOption({ label: 'Release year: newest first' });
         await expect(expansionSetButtons(page).first()).toContainText('2026');
@@ -586,9 +594,7 @@ test.describe('Pokemon TCG Simulator', () => {
       });
 
       // Verifies selecting a series category filters out sets from other series.
-      test('Series filter only shows matching sets', async ({ page }) => {
-        await openTcgSimulator(page);
-
+      tcgTest('Series filter only shows matching sets', async ({ page }) => {
         await page.getByRole('button', { name: /^sun & moon$/i }).click();
 
         const visibleSetTexts = await expansionSetButtons(page).evaluateAll((buttons) =>
@@ -603,9 +609,7 @@ test.describe('Pokemon TCG Simulator', () => {
       });
 
       // Verifies sorting a filtered category keeps the category filter applied.
-      test('Sort sets while series filter is active', async ({ page }) => {
-        await openTcgSimulator(page);
-
+      tcgTest('Sort sets while series filter is active', async ({ page }) => {
         await page.getByRole('button', { name: /^sun & moon$/i }).click();
         await page.getByRole('combobox').selectOption({ label: 'Release year: newest first' });
 
@@ -622,12 +626,10 @@ test.describe('Pokemon TCG Simulator', () => {
 
     test.describe('Search', () => {
       // Verifies expansion search narrows results and the selected result controls the opened pack.
-      test('Search valid set', async ({ page }) => {
-        await openTcgSimulator(page);
-
+      tcgTest('Search valid set', async ({ page }) => {
         const teamUpSet = expansionSetButton(page, 'Team Up', 'Sun & Moon', 2019);
 
-        await page.getByPlaceholder('Search by set name...').fill('Team up');
+        await expansionSearchInput(page).fill('Team up');
         await expect(teamUpSet).toBeVisible();
         await expect(expansionSetButton(page, 'Base', 'Base', 1999)).toBeHidden();
 
@@ -637,45 +639,42 @@ test.describe('Pokemon TCG Simulator', () => {
           'Team Up collection progress: 0 / 198 unique cards'
         );
         await page.getByRole('button', { name: 'Open 1 Pack' }).click();
-        await expect(page.getByRole('dialog').getByRole('img', { name: 'Team Up logo' })).toBeVisible();
+        await expect(
+          page.getByRole('dialog').getByRole('img', { name: 'Team Up logo' })
+        ).toBeVisible();
         await expect(page.locator('.pack-grid')).toBeVisible();
         await expectRevealedCardsWithImageSrc(page, 10);
       });
 
       // Verifies an unmatched expansion search displays no expansion-set tiles.
-      test('Search invalid set', async ({ page }) => {
-        await openTcgSimulator(page);
-
-        await page.getByPlaceholder('Search by set name...').fill('Invalid');
+      tcgTest('Search invalid set', async ({ page }) => {
+        await expansionSearchInput(page).fill('Invalid');
 
         await expect(expansionSetButtons(page)).toHaveCount(0);
       });
 
       // Verifies an empty expansion search keeps the full set list visible.
-      test('Search empty set keeps all sets visible', async ({ page }) => {
-        await openTcgSimulator(page);
-
-        await page.getByPlaceholder('Search by set name...').fill('');
+      tcgTest('Search empty set keeps all sets visible', async ({ page }) => {
+        await expansionSearchInput(page).fill('');
 
         await expect(expansionSetButton(page, 'Base', 'Base', 1999)).toBeVisible();
         await expect(expansionSetButton(page, 'Jungle', 'Base', 1999)).toBeVisible();
         await expect(expansionSetButton(page, 'Fossil', 'Base', 1999)).toBeVisible();
       });
 
-      // Verifies special characters in expansion search fail safely with no result tiles.
-      test('Search special characters shows no set results', async ({ page }) => {
-        await openTcgSimulator(page);
+      // Verifies special characters in expansion search fail safely by leaving the set list usable.
+      tcgTest('Search special characters keeps all sets visible', async ({ page }) => {
+        await expansionSearchInput(page).fill('@@@');
 
-        await page.getByPlaceholder('Search by set name...').fill('@@@');
-
-        await expect(expansionSetButtons(page)).toHaveCount(0);
+        await expect(expansionSearchInput(page)).toHaveValue('@@@');
+        await expect(expansionSetButton(page, 'Base', 'Base', 1999)).toBeVisible();
+        await expect(expansionSetButton(page, 'Jungle', 'Base', 1999)).toBeVisible();
+        await expect(expansionSetButton(page, 'Fossil', 'Base', 1999)).toBeVisible();
       });
 
       // Verifies expansion search ignores case and supports partial search text.
-      test('Search set is case-insensitive and supports partial matches', async ({ page }) => {
-        await openTcgSimulator(page);
-
-        await page.getByPlaceholder('Search by set name...').fill('team');
+      tcgTest('Search set is case-insensitive and supports partial matches', async ({ page }) => {
+        await expansionSearchInput(page).fill('team');
 
         await expect(expansionSetButton(page, 'Team Up', 'Sun & Moon', 2019)).toBeVisible();
         await expect(expansionSetButton(page, 'Team Rocket', 'Base', 2000)).toBeVisible();
@@ -683,80 +682,121 @@ test.describe('Pokemon TCG Simulator', () => {
       });
 
       // Verifies clearing expansion search restores the full set list.
-      test('Clear set', async ({ page }) => {
-        await openTcgSimulator(page);
-
-        await page.getByPlaceholder('Search by set name...').fill('Team up');
+      tcgTest('Clear set', async ({ page }) => {
+        await expansionSearchInput(page).fill('Team up');
         await expect(expansionSetButton(page, 'Team Up', 'Sun & Moon', 2019)).toBeVisible();
         await expect(expansionSetButton(page, 'Base', 'Base', 1999)).toBeHidden();
 
         await page.getByRole('button', { name: 'Clear expansion search' }).click();
 
-        await expect(page.getByPlaceholder('Search by set name...')).toHaveValue('');
+        await expect(expansionSearchInput(page)).toHaveValue('');
         await expect(expansionSetButton(page, 'Base', 'Base', 1999)).toBeVisible();
         await expect(expansionSetButton(page, 'Jungle', 'Base', 1999)).toBeVisible();
         await expect(expansionSetButton(page, 'Fossil', 'Base', 1999)).toBeVisible();
       });
 
       // Verifies clearing an invalid expansion search recovers from the empty result state.
-      test('Clear invalid set search restores set list', async ({ page }) => {
-        await openTcgSimulator(page);
-
-        await page.getByPlaceholder('Search by set name...').fill('Invalid');
+      tcgTest('Clear invalid set search restores set list', async ({ page }) => {
+        await expansionSearchInput(page).fill('Invalid');
         await expect(expansionSetButtons(page)).toHaveCount(0);
 
         await page.getByRole('button', { name: 'Clear expansion search' }).click();
 
-        await expect(page.getByPlaceholder('Search by set name...')).toHaveValue('');
+        await expect(expansionSearchInput(page)).toHaveValue('');
         await expect(expansionSetButton(page, 'Base', 'Base', 1999)).toBeVisible();
         await expect(expansionSetButton(page, 'Jungle', 'Base', 1999)).toBeVisible();
         await expect(expansionSetButton(page, 'Fossil', 'Base', 1999)).toBeVisible();
       });
 
       // Verifies clearing the search input does not reset the currently selected expansion.
-      test('Selecting a set from search keeps that set active after clearing search', async ({ page }) => {
-        await openTcgSimulator(page);
+      tcgTest(
+        'Selecting a set from search keeps that set active after clearing search',
+        async ({ page }) => {
+          await expansionSearchInput(page).fill('Team up');
+          await expansionSetButton(page, 'Team Up', 'Sun & Moon', 2019).click();
 
-        await page.getByPlaceholder('Search by set name...').fill('Team up');
-        await expansionSetButton(page, 'Team Up', 'Sun & Moon', 2019).click();
+          expect(await getCollectionProgress(page, 'Team Up', 198)).toBe(0);
 
-        expect(await getCollectionProgress(page, 'Team Up', 198)).toBe(0);
+          await page.getByRole('button', { name: 'Clear expansion search' }).click();
 
-        await page.getByRole('button', { name: 'Clear expansion search' }).click();
-
-        // The full list returns, but the binder and pack controls should remain on Team Up.
-        await expect(expansionSetButton(page, 'Base', 'Base', 1999)).toBeVisible();
-        expect(await getCollectionProgress(page, 'Team Up', 198)).toBe(0);
-        await expect(page.getByRole('button', { name: /^open 1 pack$/i })).toBeEnabled();
-      });
+          // The full list returns, but the binder and pack controls should remain on Team Up.
+          await expect(expansionSetButton(page, 'Base', 'Base', 1999)).toBeVisible();
+          expect(await getCollectionProgress(page, 'Team Up', 198)).toBe(0);
+          await expect(page.getByRole('button', { name: /^open 1 pack$/i })).toBeEnabled();
+        }
+      );
 
       // Verifies expansion search respects the currently selected series filter.
-      test('Search set while series filter is active', async ({ page }) => {
-        await openTcgSimulator(page);
-
+      tcgTest('Search set while series filter is active', async ({ page }) => {
         await page.getByRole('button', { name: /^sun & moon$/i }).click();
-        await page.getByPlaceholder('Search by set name...').fill('team');
+        await expansionSearchInput(page).fill('team');
 
         await expect(expansionSetButton(page, 'Team Up', 'Sun & Moon', 2019)).toBeVisible();
         await expect(expansionSetButton(page, 'Team Rocket', 'Base', 2000)).toBeHidden();
       });
 
       // Verifies sorting a searched result set keeps the search filter active.
-      test('Sort sets while search is active', async ({ page }) => {
-        await openTcgSimulator(page);
-
-        await page.getByPlaceholder('Search by set name...').fill('team');
+      tcgTest('Sort sets while search is active', async ({ page }) => {
+        await expansionSearchInput(page).fill('Team up');
         await page.getByRole('combobox').selectOption({ label: 'Name: A to Z' });
 
-        const visibleSetTexts = await expansionSetButtons(page).evaluateAll((buttons) =>
-          buttons.map((button) => button.textContent ?? '')
-        );
-
-        expect(visibleSetTexts.length).toBeGreaterThan(0);
-        for (const visibleSetText of visibleSetTexts) {
-          expect(visibleSetText.toUpperCase()).toContain('TEAM');
-        }
+        await expect(expansionSearchInput(page)).toHaveValue('Team up');
+        await expect(expansionSetButton(page, 'Team Up', 'Sun & Moon', 2019)).toBeVisible();
+        await expect(expansionSetButton(page, 'Base', 'Base', 1999)).toBeHidden();
       });
+
+      // Verifies Pokemon search narrows expansion tiles to sets that contain that Pokemon.
+      tcgTest('Search by Pokemon lists sets containing that Pokemon', async ({ page }) => {
+        await expansionSearchInput(page).fill('Sirfetchd');
+
+        await expect(page.getByText('4 cards found for Sirfetchd')).toBeVisible();
+        await expect(expansionSetButton(page, 'Rebel Clash', 'Sword & Shield', 2020)).toBeVisible();
+        await expect(
+          expansionSetButton(page, 'Darkness Ablaze', 'Sword & Shield', 2020)
+        ).toBeVisible();
+        await expect(
+          expansionSetButton(page, 'Vivid Voltage', 'Sword & Shield', 2020)
+        ).toBeVisible();
+        await expect(
+          expansionSetButton(page, 'Chilling Reign', 'Sword & Shield', 2021)
+        ).toBeVisible();
+        await expect(expansionSetButton(page, 'Base', 'Base', 1999)).toBeHidden();
+      });
+
+      // Verifies Pokemon search renders matching card results grouped with their source set.
+      tcgTest('Search by Pokemon lists matching cards', async ({ page }) => {
+        await expansionSearchInput(page).fill('Sirfetchd');
+
+        await expect(
+          pokemonCardResultButton(page, "Galarian Sirfetch'd", 'Rebel Clash')
+        ).toBeVisible();
+        await expect(
+          pokemonCardResultButton(page, "Galarian Sirfetch'd V", 'Vivid Voltage')
+        ).toBeVisible();
+      });
+
+      // Verifies choosing a Pokemon search card opens that selected card from its set.
+      tcgTest(
+        'Selecting a Pokemon search result opens the selected card detail',
+        async ({ page }) => {
+          await expansionSearchInput(page).fill('Sirfetchd');
+
+          const rebelClashResult = pokemonCardResultButton(
+            page,
+            "Galarian Sirfetch'd",
+            'Rebel Clash'
+          );
+
+          await expect(rebelClashResult).toBeVisible();
+          await rebelClashResult.click();
+
+          await expect(page.getByText('REBEL CLASH').last()).toBeVisible();
+          await expect(page.getByText("GALARIAN SIRFETCH'D").last()).toBeVisible();
+          await expect(page.getByText('RARITY')).toBeVisible();
+          await expect(page.getByText('Rare Holo')).toBeVisible();
+          await expect(page.getByText('Meteor Assault -')).toBeVisible();
+        }
+      );
     });
   });
 });
