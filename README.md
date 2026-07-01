@@ -13,10 +13,8 @@ The app currently has five stations under test:
 | Pokemon Pokedex       | `tests/specs/pokedex.spec.ts`           | Initial load, search, details, game Pokedex filters, sorting, random Pokemon, image fallback, and rapid action reliability                                                          |
 | Pokemon TCG Simulator | `tests/specs/tcg-simulator.spec.ts`     | Session startup, pack opening, pack modal behavior, binder progress, collection clearing, set selection, set filtering/sorting, and Pokemon/card search                             |
 | Who's That Pokemon    | `tests/specs/whos-that-pokemon.spec.ts` | Setup, trainer validation, region selection, gameplay, guessing flow, help choices, leaderboard handling, navigation, local storage reliability, and network/image failure behavior |
-| Pokemon Team Planner  | `tests/specs/team-planner.spec.ts`      | Station startup, Pokemon search, game Pokedex filtering, team selection, move/stat panels, navigation, six-Pokemon limit reliability, plus planned placeholder cases                |
-| Pokemon Quiz          | `tests/specs/pokemon-quiz.spec.ts`      | Station startup, quiz pool/category selection, playable questions, scoring panel updates, reset behavior, navigation, rapid-start reliability, plus planned placeholder cases       |
-
-Some newer station specs intentionally include `test.skip` placeholders. These are not meant to inflate the passing count; they document the intended coverage map so the remaining work is visible and organized.
+| Pokemon Team Planner  | `tests/specs/team-planner.spec.ts`      | Station startup, Pokemon search, game Pokedex filtering, team selection, move/stat panels, navigation, and six-Pokemon limit reliability                                            |
+| Pokemon Quiz          | `tests/specs/pokemon-quiz.spec.ts`      | Station startup, quiz pool/category selection, playable questions, scoring panel updates, reset behavior, navigation, and rapid-start reliability                                   |
 
 ## Coverage Themes
 
@@ -34,7 +32,6 @@ Some newer station specs intentionally include `test.skip` placeholders. These a
 - Uses Playwright's role-based locators where practical, so tests follow the user-facing UI instead of brittle implementation details.
 - Uses station-level fixtures for repeated setup such as opening Pokedex, TCG Simulator, Team Planner, Pokemon Quiz, and Who's That Pokemon.
 - Keeps assertions focused on behavior that matters to users: visible controls, updated counters, stable state, and usable recovery after edge cases.
-- Separates completed tests from planned coverage with `test.skip`, making the suite useful both as automation and as a living checklist.
 - Runs across the configured Playwright projects: Chromium, Firefox, WebKit, and mobile Chrome.
 
 ## Use of AI Tools
