@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/test';
 
-test.describe('Pokemon Team Planner', () => {
+test.describe('@live Pokemon Team Planner', () => {
   // Opens the Team Planner station from the home station chooser.
   async function openTeamPlanner(page: Page) {
     await page.goto('/');
@@ -40,6 +40,10 @@ test.describe('Pokemon Team Planner', () => {
     return page.getByRole('combobox', { name: /sort pokemon/i });
   }
 
+  function pokemonListButtons(page: Page) {
+    return page.locator('button').filter({ hasText: /^#\d{3}\s+/ });
+  }
+
   test.describe('Station / Initial Load', () => {
     // Verifies the station opens with filters, empty team slots, and analysis panels.
     teamPlannerTest('Starts Team Planner station', async ({ page }) => {
@@ -53,11 +57,46 @@ test.describe('Pokemon Team Planner', () => {
       await expect(page.getByText('Add Pokemon to scan team weaknesses.')).toBeVisible();
     });
 
-    test.skip('Shows stable loading state while Pokemon data is delayed', async ({ page }) => {
-      void page;
+    // Verifies the planner shell stays usable while Pokemon API responses are delayed.
+    test('Shows stable loading state while Pokemon data is delayed', async ({ page }) => {
+      let releasePokemonRequests!: () => void;
+      const pokemonRequestsCanContinue = new Promise<void>((resolve) => {
+        releasePokemonRequests = resolve;
+      });
+
+      await page.route('**/pokeapi.co/**', async (route) => {
+        await pokemonRequestsCanContinue;
+        await route.continue();
+      });
+
+      await page.goto('/');
+      await page.getByRole('button', { name: /pokemon team planner/i }).click();
+
+      await expect(page.getByRole('heading', { name: /pokemon team planner/i })).toBeVisible();
+      await expect(page.getByText('GAME POKEDEX')).toBeVisible();
+      await expect(page.getByPlaceholder('Filter by name or number...')).toBeVisible();
+      await expect(gamePokedexSelect(page)).toBeVisible();
+      await expect(sortPokemonSelect(page)).toHaveValue('entry');
+      await expect(page.getByText('0/6 selected')).toBeVisible();
+      await expect(page.getByRole('button', { name: /^remove all$/i })).toBeDisabled();
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeHidden();
+
+      releasePokemonRequests();
+
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible({ timeout: 30_000 });
     });
-    test.skip('Initial controls remain usable on mobile viewport', async ({ page }) => {
-      void page;
+
+    // Verifies the initial planner controls remain reachable on a mobile viewport.
+    test('Initial controls remain usable on mobile viewport', async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await openTeamPlanner(page);
+
+      await expect(page.getByPlaceholder('Filter by name or number...')).toBeVisible();
+      await expect(gamePokedexSelect(page)).toBeVisible();
+      await expect(sortPokemonSelect(page)).toHaveValue('entry');
+      await expect(page.getByRole('button', { name: /^randomize team$/i })).toBeEnabled();
+      await expect(page.getByText('0/6 selected')).toBeVisible();
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
     });
   });
 
@@ -212,17 +251,83 @@ test.describe('Pokemon Team Planner', () => {
       await expect(page.getByRole('button', { name: /^remove all$/i })).toBeEnabled();
     });
 
-    test.skip('Rapid Randomize and Remove All actions leave controls usable', async ({ page }) => {
-      void page;
+    teamPlannerTest(
+      'Rapid Randomize and Remove All actions leave controls usable',
+      async ({ page }) => {
+        for (let actionCount = 0; actionCount < 3; actionCount += 1) {
+          await page.getByRole('button', { name: /^randomize team$/i }).click();
+          await expect(page.getByText('6/6 selected')).toBeVisible();
+          await expect(page.getByText('7/6 selected')).toBeHidden();
+          await expect(page.getByRole('button', { name: /^remove all$/i })).toBeEnabled();
+
+          await page.getByRole('button', { name: /^remove all$/i }).click();
+          await expect(page.getByText('0/6 selected')).toBeVisible();
+          await expect(page.getByRole('button', { name: /^remove all$/i })).toBeDisabled();
+        }
+
+        await expect(page.getByRole('button', { name: /^randomize team$/i })).toBeEnabled();
+        await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeEnabled();
+      }
+    );
+
+    // Verifies broken image assets do not prevent team selection from working.
+    test('Image request failures leave team selection controls usable', async ({ page }) => {
+      await page.route('**/*.{png,jpg,jpeg,gif,webp,svg}', (route) => route.abort());
+      await openTeamPlanner(page);
+
+      await expect(page.getByPlaceholder('Filter by name or number...')).toBeVisible();
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeEnabled();
+
+      await pokemonListButton(page, 1, 'Bulbasaur').click();
+
+      await expect(page.getByText('1/6 selected')).toBeVisible();
+      await expect(page.getByRole('button', { name: /^remove bulbasaur$/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /^remove all$/i })).toBeEnabled();
     });
-    test.skip('Image request failures leave team selection controls usable', async ({ page }) => {
-      void page;
+
+    // Verifies delayed Pokemon data does not leave filters or team controls in a broken state.
+    test('Delayed Pokemon data keeps a stable loading or empty state', async ({ page }) => {
+      let releasePokemonRequests!: () => void;
+      const pokemonRequestsCanContinue = new Promise<void>((resolve) => {
+        releasePokemonRequests = resolve;
+      });
+
+      await page.route('**/pokeapi.co/**', async (route) => {
+        await pokemonRequestsCanContinue;
+        await route.continue();
+      });
+
+      await page.goto('/');
+      await page.getByRole('button', { name: /pokemon team planner/i }).click();
+
+      await expect(page.getByRole('heading', { name: /pokemon team planner/i })).toBeVisible();
+      await expect(gamePokedexSelect(page)).toBeEnabled();
+      await expect(sortPokemonSelect(page)).toBeDisabled();
+      await expect(page.getByRole('button', { name: /^randomize team$/i })).toBeVisible();
+      await expect(page.getByText('0/6 selected')).toBeVisible();
+      await expect(pokemonListButtons(page)).toHaveCount(0);
+
+      releasePokemonRequests();
+
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible({ timeout: 30_000 });
+      await expect(sortPokemonSelect(page)).toBeEnabled();
+      await expect(page.getByRole('button', { name: /^randomize team$/i })).toBeEnabled();
     });
-    test.skip('Delayed Pokemon data keeps a stable loading or empty state', async ({ page }) => {
-      void page;
-    });
-    test.skip('Very long search text fails safely without layout breakage', async ({ page }) => {
-      void page;
-    });
+
+    // Verifies overlong search input reaches a safe empty state and controls remain usable.
+    teamPlannerTest(
+      'Very long search text fails safely without layout breakage',
+      async ({ page }) => {
+        const longSearchText = 'QWERTYUIOPASDFGHJKLZXCVBNM1234567890'.repeat(3);
+
+        await page.getByPlaceholder('Filter by name or number...').fill(longSearchText);
+
+        await expect(page.getByText('0/6 selected')).toBeVisible();
+        await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeHidden();
+        await expect(pokemonListButtons(page)).toHaveCount(0);
+        await expect(page.getByRole('button', { name: /^randomize team$/i })).toBeEnabled();
+        await expect(page.getByRole('button', { name: /^remove all$/i })).toBeDisabled();
+      }
+    );
   });
 });

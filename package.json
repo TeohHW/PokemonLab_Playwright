@@ -5,6 +5,9 @@
   "description": "Production-ready Playwright workspace for testing any webpage.",
   "scripts": {
     "test": "playwright test",
+    "test:live": "set LIVE=true&& playwright test",
+    "test:live:headed": "set LIVE=true&& set HEADED=true&& playwright test",
+    "test:persistent": "set PERSISTENT_PROFILE=true&& playwright test",
     "test:headed": "playwright test --headed",
     "test:debug": "playwright test --debug",
     "test:ui": "playwright test --ui",

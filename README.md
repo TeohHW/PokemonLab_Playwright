@@ -32,7 +32,9 @@ The app currently has five stations under test:
 - Uses Playwright's role-based locators where practical, so tests follow the user-facing UI instead of brittle implementation details.
 - Uses station-level fixtures for repeated setup such as opening Pokedex, TCG Simulator, Team Planner, Pokemon Quiz, and Who's That Pokemon.
 - Keeps assertions focused on behavior that matters to users: visible controls, updated counters, stable state, and usable recovery after edge cases.
-- Runs across the configured Playwright projects: Chromium, Firefox, WebKit, and mobile Chrome.
+- Normal test runs exclude `@live` specs and run across the configured Playwright projects: Chromium, Firefox, WebKit, and mobile Chrome.
+- Live PokeAPI-backed specs are tagged `@live`, run separately in Chromium only, and use a persistent browser profile so IndexedDB cache can be reused between live runs.
+- Normal UI tests block unmocked PokeAPI calls; add targeted route mocks for new non-live tests that need API-shaped data.
 
 ## Use of AI Tools
 
@@ -57,8 +59,11 @@ BASE_URL=https://your-pokemon-lab-url.example
 
 ```powershell
 npm.cmd test              # Run all tests headlessly
+npm.cmd run test:live     # Run live PokeAPI-backed specs in Chromium
+npm.cmd run test:persistent # Run tests with a persistent browser profile
 npm.cmd run test:smoke    # Run smoke tests only
 npm.cmd run test:headed   # Watch tests run in a browser
+npm.cmd run test:live:headed # Watch live specs run in a browser
 npm.cmd run test:debug    # Debug with Playwright Inspector
 npm.cmd run test:ui       # Open Playwright UI mode
 npm.cmd run codegen       # Generate locators while browsing

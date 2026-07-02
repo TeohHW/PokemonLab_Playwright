@@ -5,6 +5,7 @@ dotenv.config({ quiet: true });
 
 const baseURL = process.env.BASE_URL ?? 'https://example.com';
 const isCI = Boolean(process.env.CI);
+const isLive = process.env.LIVE === 'true';
 
 export default defineConfig({
   testDir: './tests',
@@ -13,10 +14,12 @@ export default defineConfig({
   expect: {
     timeout: 7_500
   },
-  fullyParallel: true,
+  fullyParallel: !isLive,
+  grep: isLive ? /@live/ : undefined,
+  grepInvert: isLive ? undefined : /@live/,
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
-  workers: isCI ? 2 : undefined,
+  workers: isLive ? 1 : isCI ? 2 : undefined,
   reporter: [
     ['list'],
     ['html', { open: 'never', outputFolder: 'playwright-report' }],
@@ -33,22 +36,31 @@ export default defineConfig({
     ignoreHTTPSErrors: process.env.IGNORE_HTTPS_ERRORS === 'true'
   },
   projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] }
-    },
-    {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] }
-    },
-    {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] }
-    },
-    {
-      name: 'mobile-chrome',
-      use: { ...devices['Pixel 7'] }
-    }
+    ...(isLive
+      ? [
+          {
+            name: 'live-chromium',
+            use: { ...devices['Desktop Chrome'] }
+          }
+        ]
+      : [
+          {
+            name: 'chromium',
+            use: { ...devices['Desktop Chrome'] }
+          },
+          {
+            name: 'firefox',
+            use: { ...devices['Desktop Firefox'] }
+          },
+          {
+            name: 'webkit',
+            use: { ...devices['Desktop Safari'] }
+          },
+          {
+            name: 'mobile-chrome',
+            use: { ...devices['Pixel 7'] }
+          }
+        ])
   ],
   outputDir: 'test-results/artifacts'
 });

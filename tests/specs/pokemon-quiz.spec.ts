@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/test';
 
-test.describe('Pokemon Quiz', () => {
+test.describe('@live Pokemon Quiz', () => {
   // Opens the Pokemon Quiz station from the home station chooser.
   async function openPokemonQuiz(page: Page) {
     await page.goto('/');
