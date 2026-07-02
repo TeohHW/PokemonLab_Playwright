@@ -14,6 +14,10 @@
     "**/playwright-report": true,
     "**/test-results": true
   },
+  "playwright.env": {
+    "LIVE": "true",
+    "PW_SHOW_ALL_TESTS": "true"
+  },
   "typescript.tsserver.watchOptions": {
     "excludeDirectories": [
       "**/node_modules",

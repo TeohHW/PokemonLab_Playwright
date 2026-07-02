@@ -6,6 +6,7 @@ dotenv.config({ quiet: true });
 const baseURL = process.env.BASE_URL ?? 'https://example.com';
 const isCI = Boolean(process.env.CI);
 const isLive = process.env.LIVE === 'true';
+const showAllTests = process.env.PW_SHOW_ALL_TESTS === 'true';
 
 export default defineConfig({
   testDir: './tests',
@@ -15,8 +16,8 @@ export default defineConfig({
     timeout: 7_500
   },
   fullyParallel: !isLive,
-  grep: isLive ? /@live/ : undefined,
-  grepInvert: isLive ? undefined : /@live/,
+  grep: showAllTests ? undefined : isLive ? /@live/ : undefined,
+  grepInvert: showAllTests ? undefined : isLive ? undefined : /@live/,
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
   workers: isLive ? 1 : isCI ? 2 : undefined,
