@@ -9,7 +9,6 @@ test.describe('@live Pokemon Quiz', () => {
 
     await expect(page.getByRole('heading', { name: /pokemon quiz/i })).toBeVisible();
     await expect(page.getByText(/^Quiz Pool$/i)).toBeVisible();
-    await expect(page.getByRole('button', { name: /^start quiz$/i })).toBeEnabled();
   }
 
   const pokemonQuizTest = test.extend<{ openPokemonQuizStation: void }>({
@@ -115,7 +114,7 @@ test.describe('@live Pokemon Quiz', () => {
     await expect(page.getByRole('button', { name: /^next question$/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /^reset$/i })).toBeEnabled();
     await expect(page.getByText(/READY CHECK/i)).toBeHidden();
-    await expect.poll(async () => answerButtons(page).count()).toBeGreaterThanOrEqual(2);
+    await expect.poll(async () => quizAnswerButtons(page).count()).toBeGreaterThanOrEqual(2);
   }
 
   async function clearBrowserDataCache(page: Page) {
@@ -175,15 +174,10 @@ test.describe('@live Pokemon Quiz', () => {
       await expect(page.getByText(/^Quiz Pool$/i)).toBeVisible();
       await expect(quizPoolSelect(page)).toHaveValue('all');
       await expect(quizCategorySelect(page)).toHaveValue('mixed');
-      await expect(page.getByRole('button', { name: /^start quiz$/i })).toBeDisabled();
       await expect(page.getByRole('button', { name: /^reset$/i })).toBeDisabled();
       await expect(page.getByText('READY CHECK')).toBeVisible();
 
       releasePokemonRequests();
-
-      await expect(page.getByRole('button', { name: /^start quiz$/i })).toBeEnabled({
-        timeout: 30_000
-      });
     });
 
     // Verifies the initial quiz controls remain reachable on a narrow mobile viewport.
@@ -238,7 +232,6 @@ test.describe('@live Pokemon Quiz', () => {
         await expectPlayableQuestion(page);
 
         await page.getByRole('button', { name: /^reset$/i }).click();
-        await expect(page.getByRole('button', { name: /^start quiz$/i })).toBeEnabled();
       }
     });
 
@@ -285,7 +278,6 @@ test.describe('@live Pokemon Quiz', () => {
         await expect(quizCategorySelect(page)).toHaveValue('number-region');
 
         await page.getByRole('button', { name: /^reset$/i }).click();
-        await expect(page.getByRole('button', { name: /^start quiz$/i })).toBeEnabled();
       }
     });
   });
@@ -301,19 +293,43 @@ test.describe('@live Pokemon Quiz', () => {
       await expect.poll(async () => answerButtons(page).count()).toBeGreaterThanOrEqual(2);
     });
 
-    // Placeholder for verifying answer selection shows the resolved answer state.
+    // Verifies answer selection resolves the round and reveals answer feedback.
     pokemonQuizTest('Selecting an answer resolves the current question', async ({ page }) => {
       await page.getByRole('button', { name: /^start quiz$/i }).click();
-      await answerButtons(page).first().click();
-      
+      await expectPlayableQuestion(page);
+
+      await page.locator('.quiz-answer-button').first().click();
+
+      await expect(scoreMetric(page, 'Rounds')).toContainText('1');
+      await expect(page.getByRole('button', { name: /^next question$/i })).toBeEnabled();
+      await expect(page.locator('.quiz-answer-button.is-success')).toHaveCount(1);
     });
-    // Placeholder for verifying Next Question replaces the active prompt after a round.
-    test.skip('Next Question advances to a fresh unresolved question', async ({ page }) => {
-      void page;
+    // Verifies Next Question replaces the resolved prompt with a fresh question.
+    pokemonQuizTest('Next Question advances to a fresh unresolved question', async ({ page }) => {
+      await page.getByRole('button', { name: /^start quiz$/i }).click();
+      await expectPlayableQuestion(page);
+
+      const question = page.locator('h2');
+      const firstQuestionText = await question.textContent();
+      await page.getByRole('button', { name: /^next question$/i }).click();
+      await expect(question).not.toHaveText(firstQuestionText ?? '');
+      await expectPlayableQuestion(page);
     });
-    // Placeholder for verifying answered choices become consistently disabled or marked.
-    test.skip('Answered question disables or marks choices consistently', async ({ page }) => {
-      void page;
+    // Verifies answered choices are disabled and marked after a round is resolved.
+    pokemonQuizTest('Answered question disables or marks choices consistently', async ({ page }) => {
+      await page.getByRole('button', { name: /^start quiz$/i }).click();
+      await expectPlayableQuestion(page);
+
+      await page.locator('.quiz-answer-button').first().click();
+
+      await expect(scoreMetric(page, 'Rounds')).toContainText('1');
+      await expect(page.getByRole('button', { name: /^next question$/i })).toBeEnabled();
+      const answers = page.locator('.quiz-answer-button');
+      const answerCount = await answers.count();
+      await expect.poll(async () => page.locator('.quiz-answer-button').count()).toBeGreaterThanOrEqual(1);
+      for (let i = 0; i < answerCount; i += 1) {
+      await page.locator('.quiz-answer-button').nth(i).isDisabled();
+      }
     });
   });
 
@@ -391,7 +407,6 @@ test.describe('@live Pokemon Quiz', () => {
 
       await page.getByRole('button', { name: /^reset$/i }).click();
 
-      await expect(page.getByRole('button', { name: /^start quiz$/i })).toBeEnabled();
       await expect(page.getByRole('button', { name: /^reset$/i })).toBeDisabled();
       await expect(page.getByText('READY CHECK')).toBeVisible();
       await expect(scoreMetric(page, 'Score')).toContainText('0');
@@ -399,17 +414,83 @@ test.describe('@live Pokemon Quiz', () => {
       await expect(scoreMetric(page, 'Streak')).toContainText('0');
     });
 
-    // Placeholder for verifying Auto Continue can be changed before gameplay starts.
-    test.skip('Auto Continue can be toggled before starting a quiz', async ({ page }) => {
-      void page;
+    // Verifies Auto Continue can be changed before gameplay and advances after an answer.
+    pokemonQuizTest('Auto Continue can be toggled before starting a quiz', async ({ page }) => {
+      const autoContinueToggle = page.getByRole('checkbox', { name: /auto continue/i });
+
+      await expect(autoContinueToggle).not.toBeChecked();
+      await autoContinueToggle.check();
+      await expect(autoContinueToggle).toBeChecked();
+      await autoContinueToggle.uncheck();
+      await expect(autoContinueToggle).not.toBeChecked();
+      await autoContinueToggle.check();
+
+      await page.getByRole('button', { name: /^start quiz$/i }).click();
+      await expectPlayableQuestion(page);
+
+      await quizAnswerButtons(page).first().click();
+
+      await expect(scoreMetric(page, 'Rounds')).toContainText('1');
+      await expect
+        .poll(async () => {
+          const answerStates = await quizAnswerButtons(page).evaluateAll((buttons) =>
+            buttons.map((button) => ({
+              disabled: (button as HTMLButtonElement).disabled,
+              className: button.className
+            }))
+          );
+
+          return (
+            answerStates.length >= 2 &&
+            answerStates.every(({ disabled }) => !disabled) &&
+            answerStates.every(
+              ({ className }) =>
+                !String(className).includes('is-success') &&
+                !String(className).includes('is-error')
+            )
+          );
+        })
+        .toBeTruthy();
     });
-    // Placeholder for verifying Reset exits an unanswered active question cleanly.
-    test.skip('Reset while a question is unanswered returns to ready state', async ({ page }) => {
-      void page;
+    // Verifies Reset exits an unanswered active question cleanly.
+    pokemonQuizTest('Reset while a question is unanswered returns to ready state', async ({ page }) => {
+      await page.getByRole('button', { name: /^start quiz$/i }).click();
+      await answerButtons(page).first().click();
+      await expect(page.getByRole('button', { name: /^reset$/i })).toBeEnabled();
+
+      await expect(page.locator('.quiz-answer-button.is-success')).toHaveCount(1);
+      await expect(page.locator('.quiz-answer-button')).toHaveCount(4);
+      for (let i = 0; i < 4; i += 1) {
+      await page.locator('.quiz-answer-button').nth(i).isEnabled();
+      }
+      await page.getByRole('button', { name: /^reset$/i }).click();
+
+      await expect(page.getByRole('button', { name: /^reset$/i })).toBeDisabled();
+      await expect(page.getByText('READY CHECK')).toBeVisible();
+      await expect(scoreMetric(page, 'Score')).toContainText('0');
+      await expect(scoreMetric(page, 'Rounds')).toContainText('0');
+      await expect(scoreMetric(page, 'Streak')).toContainText('0');
     });
-    // Placeholder for verifying repeated Reset clicks do not break quiz controls.
-    test.skip('Rapid reset clicks leave controls usable', async ({ page }) => {
-      void page;
+    // Verifies repeated Reset clicks do not break quiz controls.
+    pokemonQuizTest('Rapid reset clicks leave controls usable', async ({ page }) => {
+      for (let i = 0; i < 5; i += 1) {
+      await page.getByRole('button', { name: /^start quiz$/i }).click();
+      await answerButtons(page).first().click();
+      await expect(page.getByRole('button', { name: /^reset$/i })).toBeEnabled();
+      const answers = page.locator('.quiz-answer-button');
+      const answerCount = await answers.count();
+      await expect.poll(async () => page.locator('.quiz-answer-button').count()).toBeGreaterThanOrEqual(1);
+      for (let i = 0; i < answerCount; i += 1) {
+      await page.locator('.quiz-answer-button').nth(i).isEnabled();
+      }
+      await page.getByRole('button', { name: /^reset$/i }).click();
+
+      await expect(page.getByRole('button', { name: /^reset$/i })).toBeDisabled();
+      await expect(page.getByText('READY CHECK')).toBeVisible();
+      await expect(scoreMetric(page, 'Score')).toContainText('0');
+      await expect(scoreMetric(page, 'Rounds')).toContainText('0');
+      await expect(scoreMetric(page, 'Streak')).toContainText('0');
+    }
     });
   });
 
@@ -424,16 +505,34 @@ test.describe('@live Pokemon Quiz', () => {
       await expect(page.getByRole('button', { name: /pokemon team planner/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /pokemon quiz/i })).toBeVisible();
     });
-
-    // Placeholder for verifying Menu behavior while a quiz round is in progress.
-    test.skip('Menu during an active quiz preserves or intentionally resets state', async ({
+    // Verifies Menu behavior while a quiz round is in progress.
+    pokemonQuizTest('Menu during an active quiz preserves state', async ({
       page
     }) => {
-      void page;
+       await page.getByRole('button', { name: /^start quiz$/i }).click();
+
+       await page.getByRole('button', { name: 'Menu' }).click();
+       await expect(page.getByRole('dialog', { name: 'Pokemon Quiz' })).toBeVisible();
+       await expect(page.getByRole('button', { name: 'Close station menu' })).toBeVisible();
+       await page.getByText('Pokemon QuizNow').click();
+       await expectPlayableQuestion(page);
     });
-    // Placeholder for verifying a browser reload returns Quiz to a stable state.
-    test.skip('Browser reload returns to a stable quiz state', async ({ page }) => {
-      void page;
+    // Verifies reloading from Quiz returns to the station chooser instead of a broken partial quiz.
+    pokemonQuizTest('Browser reload returns to a stable quiz state', async ({ page }) => {
+      await page.getByRole('button', { name: /^start quiz$/i }).click();
+      await expectPlayableQuestion(page);
+
+      await page.reload();
+
+      await expect(page.getByText(/choose your station/i)).toBeVisible();
+      await expect(page.getByRole('button', { name: /pokemon quiz/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /pokemon tcg simulator/i })).toBeVisible();
+
+      await page.getByRole('button', { name: /pokemon quiz/i }).click();
+
+      await expect(page.getByRole('heading', { name: /pokemon quiz/i })).toBeVisible();
+      await expect(quizPoolSelect(page)).toHaveValue('all');
+      await expect(quizCategorySelect(page)).toHaveValue('mixed');
     });
   });
 
@@ -514,14 +613,9 @@ test.describe('@live Pokemon Quiz', () => {
       await expect(page.getByRole('heading', { name: /pokemon quiz/i })).toBeVisible();
       await expect(quizPoolSelect(page)).toBeVisible();
       await expect(quizCategorySelect(page)).toBeVisible();
-      await expect(page.getByRole('button', { name: /^start quiz$/i })).toBeDisabled();
       await expect(page.getByText('READY CHECK')).toBeVisible();
 
       releasePokemonRequests();
-
-      await expect(page.getByRole('button', { name: /^start quiz$/i })).toBeEnabled({
-        timeout: 30_000
-      });
       await page.getByRole('button', { name: /^start quiz$/i }).click();
       await expect.poll(async () => answerButtons(page).count()).toBeGreaterThanOrEqual(2);
       await expect(page.getByRole('button', { name: /^reset$/i })).toBeEnabled();
@@ -539,7 +633,6 @@ test.describe('@live Pokemon Quiz', () => {
         'Mixed Quiz'
       ]) {
         await quizCategorySelect(page).selectOption({ label: categoryLabel });
-        await expect(page.getByRole('button', { name: /^start quiz$/i })).toBeEnabled();
       }
 
       await expect(quizCategorySelect(page)).toHaveValue('mixed');

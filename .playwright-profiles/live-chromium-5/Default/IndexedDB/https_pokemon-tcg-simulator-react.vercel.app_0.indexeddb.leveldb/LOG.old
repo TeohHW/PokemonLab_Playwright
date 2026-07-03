@@ -1,0 +1,14 @@
+2026/07/03-11:37:28.836 2bc0 Reusing MANIFEST C:\Users\teohh\VSCode Workspace\PokemonLab_Playwright\.playwright-profiles\live-chromium-5\Default\IndexedDB\https_pokemon-tcg-simulator-react.vercel.app_0.indexeddb.leveldb/MANIFEST-000001
+2026/07/03-11:37:28.837 2bc0 Recovering log #4
+2026/07/03-11:37:28.840 2bc0 Reusing old log C:\Users\teohh\VSCode Workspace\PokemonLab_Playwright\.playwright-profiles\live-chromium-5\Default\IndexedDB\https_pokemon-tcg-simulator-react.vercel.app_0.indexeddb.leveldb/000004.log 
+2026/07/03-11:37:28.849 f78 Level-0 table #8: started
+2026/07/03-11:37:28.856 f78 Level-0 table #8: 649642 bytes OK
+2026/07/03-11:37:28.859 f78 Delete type=0 #4
+2026/07/03-11:37:28.860 f78 Manual compaction at level-0 from '\x00\x02\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x03\x00\x00\x00' @ 0 : 0; will stop at (end)
+2026/07/03-11:37:28.860 f78 Manual compaction at level-1 from '\x00\x02\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x03\x00\x00\x00' @ 0 : 0; will stop at '\x00\x02\x01\x02\x01$\x00h\x00t\x00t\x00p\x00s\x00:\x00/\x00/\x00p\x00o\x00k\x00e\x00a\x00p\x00i\x00.\x00c\x00o\x00/\x00a\x00p\x00i\x00/\x00v\x002\x00/\x00t\x00y\x00p\x00e\x00/\x00w\x00a\x00t\x00e\x00r' @ 3063 : 0
+2026/07/03-11:37:28.860 f78 Compacting 1@1 + 1@2 files
+2026/07/03-11:37:28.866 f78 Generated table #9@1: 6 keys, 274 bytes
+2026/07/03-11:37:28.866 f78 Compacted 1@1 + 1@2 files => 274 bytes
+2026/07/03-11:37:28.869 f78 compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/07/03-11:37:28.869 f78 Delete type=2 #8
+2026/07/03-11:37:28.869 f78 Manual compaction at level-1 from '\x00\x02\x01\x02\x01$\x00h\x00t\x00t\x00p\x00s\x00:\x00/\x00/\x00p\x00o\x00k\x00e\x00a\x00p\x00i\x00.\x00c\x00o\x00/\x00a\x00p\x00i\x00/\x00v\x002\x00/\x00t\x00y\x00p\x00e\x00/\x00w\x00a\x00t\x00e\x00r' @ 3063 : 0 .. '\x00\x03\x00\x00\x00' @ 0 : 0; will stop at (end)
