@@ -8,13 +8,15 @@ The suite is written to be readable as a small portfolio project: tests are grou
 
 The app currently has five stations under test:
 
-| Station               | Spec                                    | Current coverage                                                                                                                                                                    |
-| --------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pokemon Pokedex       | `tests/specs/pokedex.spec.ts`           | Initial load, search, details, game Pokedex filters, sorting, random Pokemon, image fallback, and rapid action reliability                                                          |
-| Pokemon TCG Simulator | `tests/specs/tcg-simulator.spec.ts`     | Session startup, pack opening, pack modal behavior, binder progress, collection clearing, set selection, set filtering/sorting, and Pokemon/card search                             |
-| Who's That Pokemon    | `tests/specs/whos-that-pokemon.spec.ts` | Setup, trainer validation, region selection, gameplay, guessing flow, help choices, leaderboard handling, navigation, local storage reliability, and network/image failure behavior |
-| Pokemon Team Planner  | `tests/specs/team-planner.spec.ts`      | Station startup, Pokemon search, sorting, game Pokedex filtering, team building/removal, random teams, move selection, matchup/stat analysis, navigation, and reliability checks     |
-| Pokemon Quiz          | `tests/specs/pokemon-quiz.spec.ts`      | Station startup, quiz pool/category selection, playable questions, scoring panel updates, reset behavior, navigation, and rapid-start reliability                                   |
+| Station               | Spec                                    | Unique tests | Current coverage                                                                                                                                                                    |
+| --------------------- | --------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pokemon Pokedex       | `tests/specs/pokedex.spec.ts`           | 39           | Initial load, search, details, game Pokedex filters, sorting, random Pokemon, image fallback, and rapid action reliability                                                          |
+| Pokemon TCG Simulator | `tests/specs/tcg-simulator.spec.ts`     | 38           | Session startup, pack opening, pack modal behavior, binder progress, collection clearing, set selection, set filtering/sorting, and Pokemon/card search                             |
+| Who's That Pokemon    | `tests/specs/whos-that-pokemon.spec.ts` | 36           | Setup, trainer validation, region selection, gameplay, guessing flow, help choices, leaderboard handling, navigation, local storage reliability, and network/image failure behavior |
+| Pokemon Team Planner  | `tests/specs/team-planner.spec.ts`      | 29           | Station startup, Pokemon search, sorting, game Pokedex filtering, team building/removal, random teams, move selection, matchup/stat analysis, navigation, and reliability checks     |
+| Pokemon Quiz          | `tests/specs/pokemon-quiz.spec.ts`      | 27           | Station startup, quiz pool/category selection, playable questions, scoring panel updates, reset behavior, navigation, and rapid-start reliability                                   |
+
+These station tests pass across the configured desktop Firefox, desktop WebKit, and mobile Chrome Playwright projects.
 
 ## Coverage Themes
 
