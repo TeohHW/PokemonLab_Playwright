@@ -2,6 +2,11 @@ import type { Locator, Page } from '@playwright/test';
 import { test, expect } from '../fixtures/test';
 
 test.describe('Pokemon TCG Simulator', () => {
+  const transparentPng = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+    'base64'
+  );
+
   function openOnePackButton(page: Page): Locator {
     return page.getByRole('button', { name: /^open 1 pack$/i });
   }
@@ -19,7 +24,14 @@ test.describe('Pokemon TCG Simulator', () => {
 
   const tcgTest = test.extend<{ openTcgSimulatorStation: void }>({
     openTcgSimulatorStation: [
-      async ({ page }, use) => {
+      async ({ context, page }, use) => {
+        await context.route('https://images.pokemontcg.io/**', (route) =>
+          route.fulfill({
+            status: 200,
+            contentType: 'image/png',
+            body: transparentPng
+          })
+        );
         await page.goto('/');
         await page.evaluate(() => {
           localStorage.removeItem('pokemon-pack-simulator-collection');
