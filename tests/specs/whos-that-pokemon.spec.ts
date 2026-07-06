@@ -822,8 +822,13 @@ test.describe("@live Who's That Pokemon", () => {
 
     // Verifies delayed Pokemon API responses do not break the setup screen before a round starts.
     test('Network delay during Pokemon data load shows stable setup UI', async ({ page }) => {
+      let releasePokemonRequests!: () => void;
+      const pokemonRequestsCanContinue = new Promise<void>((resolve) => {
+        releasePokemonRequests = resolve;
+      });
+
       await page.route('**/pokeapi.co/**', async (route) => {
-        await page.waitForTimeout(1_000);
+        await pokemonRequestsCanContinue;
         await route.continue();
       });
 
@@ -833,6 +838,8 @@ test.describe("@live Who's That Pokemon", () => {
       await expect(page.getByRole('textbox')).toBeEnabled();
       await expect(page.getByRole('button', { name: /^start game$/i })).toBeEnabled();
       await expect(page.getByText('LEADERBOARD')).toBeVisible();
+
+      releasePokemonRequests();
     });
 
     // Verifies malformed saved leaderboard data does not prevent the station from rendering.
