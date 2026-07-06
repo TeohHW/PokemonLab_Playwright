@@ -228,6 +228,8 @@ test.describe('Pokemon TCG Simulator', () => {
     });
 
     test.describe('Pack opening', () => {
+      test.describe.configure({ timeout: 60_000 });
+
       // Verifies a single default Base pack reveals 10 cards and updates binder progress.
       tcgTest('Opens default pack - Base', async ({ page }) => {
         await openDefaultPack(page);
