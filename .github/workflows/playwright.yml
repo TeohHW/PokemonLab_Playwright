@@ -30,7 +30,7 @@ jobs:
       - name: Verify workspace
         run: npm run verify
         env:
-          BASE_URL: ${{ vars.BASE_URL || 'https://example.com' }}
+          BASE_URL: ${{ vars.BASE_URL || 'https://pokemon-tcg-simulator-react.vercel.app/' }}
 
       - name: Upload report
         if: always()

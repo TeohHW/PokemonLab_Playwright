@@ -55,7 +55,7 @@ npm.cmd test
 Set the target site in `.env`:
 
 ```env
-BASE_URL=https://your-pokemon-lab-url.example
+BASE_URL=https://pokemon-tcg-simulator-react.vercel.app/
 ```
 
 ## Common Commands
