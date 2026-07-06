@@ -7,7 +7,8 @@ type TestFixtures = {
   homePage: HomePage;
 };
 
-const usePersistentProfile = process.env.LIVE === 'true' || process.env.PERSISTENT_PROFILE === 'true';
+const usePersistentProfile =
+  process.env.LIVE === 'true' || process.env.PERSISTENT_PROFILE === 'true';
 const isLive = process.env.LIVE === 'true';
 
 export const test = base.extend<TestFixtures>({
@@ -16,7 +17,10 @@ export const test = base.extend<TestFixtures>({
 
     if (usePersistentProfile) {
       const profileRoot = process.env.PW_PROFILE_DIR ?? '.playwright-profiles';
-      const profileName = `${testInfo.project.name}-${testInfo.workerIndex}`.replace(/[^a-z0-9.-]/gi, '-');
+      const profileName = `${testInfo.project.name}-${testInfo.workerIndex}`.replace(
+        /[^a-z0-9.-]/gi,
+        '-'
+      );
       const profileDir = path.resolve(profileRoot, profileName);
       const context = await browserType.launchPersistentContext(profileDir, {
         ...launchOptions,
@@ -44,7 +48,8 @@ export const test = base.extend<TestFixtures>({
             status: 503,
             contentType: 'application/json',
             body: JSON.stringify({
-              error: 'PokeAPI is disabled in normal UI tests. Mock this route or run with LIVE=true.'
+              error:
+                'PokeAPI is disabled in normal UI tests. Mock this route or run with LIVE=true.'
             })
           })
         );

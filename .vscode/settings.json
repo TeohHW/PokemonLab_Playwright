@@ -19,10 +19,6 @@
     "PW_SHOW_ALL_TESTS": "true"
   },
   "typescript.tsserver.watchOptions": {
-    "excludeDirectories": [
-      "**/node_modules",
-      "**/playwright-report",
-      "**/test-results"
-    ]
+    "excludeDirectories": ["**/node_modules", "**/playwright-report", "**/test-results"]
   }
 }
