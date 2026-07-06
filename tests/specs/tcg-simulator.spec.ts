@@ -271,17 +271,17 @@ test.describe('Pokemon TCG Simulator', () => {
           await expectRevealedCardsWithImageSrc(page, 10);
           await expect(openedPack.locator('.holo-overlay')).toHaveCount(10);
         });
-      });
 
-      // Verifies the multi-pack action reveals 100 cards and enables binder clearing.
-      tcgTest('Open 10 packs', async ({ page }) => {
-        await page.getByRole('button', { name: /^open 10 packs$/i }).click();
+        // Verifies the multi-pack action reveals 100 cards and enables binder clearing.
+        tcgTest('Open 10 packs', async ({ page }) => {
+          await page.getByRole('button', { name: /^open 10 packs$/i }).click();
 
-        await expect(page.locator('.pack-grid')).toBeVisible();
-        await expectRevealedCardsWithImageSrc(page, 100);
+          await expect(page.locator('.pack-grid')).toBeVisible();
+          await expectRevealedCardsWithImageSrc(page, 100);
 
-        await page.getByRole('button', { name: /^close$/i }).click();
-        await expect(page.getByRole('button', { name: 'Clear This Binder' })).toBeEnabled();
+          await page.getByRole('button', { name: /^close$/i }).click();
+          await expect(page.getByRole('button', { name: 'Clear This Binder' })).toBeEnabled();
+        });
       });
 
       // Verifies a god pack still contributes unique cards to the selected binder.
