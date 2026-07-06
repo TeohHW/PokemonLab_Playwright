@@ -37,6 +37,7 @@ These station tests pass across the configured desktop Firefox, desktop WebKit, 
 - Normal test runs exclude `@live` specs and run across the configured Playwright projects: Chromium, Firefox, WebKit, and mobile Chrome.
 - Live PokeAPI-backed specs are tagged `@live`, run separately in Chromium only, and use a persistent browser profile so IndexedDB cache can be reused between live runs.
 - Normal UI tests block unmocked PokeAPI calls; add targeted route mocks for new non-live tests that need API-shaped data.
+- GitHub Actions CI is enabled through `.github/workflows/playwright.yml`; it runs `npm run verify` on pull requests, pushes to `main` or `master`, and manual workflow dispatch.
 
 ## Use of AI Tools
 

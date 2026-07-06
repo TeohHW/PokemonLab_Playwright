@@ -2,8 +2,9 @@ name: Playwright
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
