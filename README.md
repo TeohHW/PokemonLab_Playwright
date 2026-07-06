@@ -16,7 +16,7 @@ The app currently has five stations under test:
 | Pokemon Team Planner  | `tests/specs/team-planner.spec.ts`      | 29           | Station startup, Pokemon search, sorting, game Pokedex filtering, team building/removal, random teams, move selection, matchup/stat analysis, navigation, and reliability checks    |
 | Pokemon Quiz          | `tests/specs/pokemon-quiz.spec.ts`      | 27           | Station startup, quiz pool/category selection, playable questions, scoring panel updates, reset behavior, navigation, and rapid-start reliability                                   |
 
-These station tests pass across the configured Chromium, desktop Firefox, desktop WebKit, and mobile Chrome Playwright projects, with a small number of TCG simulator cases skipped only on CI WebKit because they are flaky there while remaining covered by the other browser projects and local WebKit runs.
+These station tests pass across the configured Chromium, desktop Firefox, desktop WebKit, and mobile Chrome Playwright projects, with the TCG simulator spec skipped only on CI WebKit because it is flaky there while remaining covered by the other browser projects and local WebKit runs.
 
 ## Coverage Themes
 
@@ -37,7 +37,7 @@ These station tests pass across the configured Chromium, desktop Firefox, deskto
 - Normal test runs exclude `@live` specs and run across the configured Playwright projects: Chromium, Firefox, WebKit, and mobile Chrome.
 - Live PokeAPI-backed specs are tagged `@live`, run separately in Chromium only, and use a persistent browser profile so IndexedDB cache can be reused between live runs.
 - Normal UI tests block unmocked PokeAPI calls; add targeted route mocks for new non-live tests that need API-shaped data.
-- A few TCG simulator pack/binder tests are skipped only when `CI=true` and the Playwright project is WebKit; this keeps required CI stable while preserving the checks in Chromium, Firefox, and local WebKit runs.
+- The TCG simulator spec is quarantined at spec level only when `CI=true` and the Playwright project is WebKit, because CI WebKit flakes moved between unrelated TCG tests. This keeps required CI stable while preserving the same checks in Chromium, Firefox, and local WebKit runs.
 - GitHub Actions CI is enabled through `.github/workflows/playwright.yml`; it runs `npm run verify` on pull requests, pushes to `main` or `master`, and manual workflow dispatch.
 
 ## Use of AI Tools
