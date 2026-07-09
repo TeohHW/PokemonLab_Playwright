@@ -28,9 +28,11 @@ jobs:
         run: npx playwright install --with-deps
 
       - name: Verify workspace
-        run: npm run verify
+        run: |
+          echo "BASE_URL=$BASE_URL"
+          npm run verify
         env:
-          BASE_URL: ${{ vars.BASE_URL || 'https://pokemon-tcg-simulator-react.vercel.app/' }}
+          BASE_URL: ${{ vars.BASE_URL || 'https://pokemon-lab-react.vercel.app/' }}
 
       - name: Upload report
         if: always()
