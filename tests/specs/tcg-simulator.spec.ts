@@ -17,12 +17,18 @@ test.describe('Pokemon TCG Simulator', () => {
   }
 
   async function enterTcgSimulator(page: Page) {
+    const packButton = openOnePackButton(page);
+
+    if (await packButton.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await expect(packButton).toBeEnabled({ timeout: 30_000 });
+      return packButton;
+    }
+
     const simulatorButton = page.getByRole('button', { name: /pokemon tcg simulator/i });
 
     await expect(simulatorButton).toBeEnabled({ timeout: 30_000 });
     await simulatorButton.click();
 
-    const packButton = openOnePackButton(page);
     await expect(packButton).toBeEnabled({ timeout: 30_000 });
 
     return packButton;
