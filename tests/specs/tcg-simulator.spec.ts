@@ -16,15 +16,22 @@ test.describe('Pokemon TCG Simulator', () => {
     return page.getByRole('button', { name: /^open 1 pack$/i });
   }
 
-  // Enters the simulator from the landing page and waits until pack controls are usable.
-  async function openTcgSimulator(page: Page) {
-    await page.goto('/');
-    await page.getByRole('button', { name: /pokemon tcg simulator/i }).click();
+  async function enterTcgSimulator(page: Page) {
+    const simulatorButton = page.getByRole('button', { name: /pokemon tcg simulator/i });
+
+    await expect(simulatorButton).toBeEnabled({ timeout: 30_000 });
+    await simulatorButton.click();
 
     const packButton = openOnePackButton(page);
     await expect(packButton).toBeEnabled({ timeout: 30_000 });
 
     return packButton;
+  }
+
+  // Enters the simulator from the landing page and waits until pack controls are usable.
+  async function openTcgSimulator(page: Page) {
+    await page.goto('/');
+    return enterTcgSimulator(page);
   }
 
   const tcgTest = test.extend<{ openTcgSimulatorStation: void }>({
@@ -41,8 +48,7 @@ test.describe('Pokemon TCG Simulator', () => {
         await page.evaluate(() => {
           localStorage.removeItem('pokemon-pack-simulator-collection');
         });
-        await page.getByRole('button', { name: /pokemon tcg simulator/i }).click();
-        await expect(openOnePackButton(page)).toBeEnabled({ timeout: 30_000 });
+        await enterTcgSimulator(page);
         await use();
       },
       { auto: true }
@@ -429,7 +435,7 @@ test.describe('Pokemon TCG Simulator', () => {
         // Seed all Base cards directly to avoid relying on random pulls to complete the set.
         await seedFullBaseBinder(page);
         await page.reload();
-        await page.getByRole('button', { name: /pokemon tcg simulator/i }).click();
+        await enterTcgSimulator(page);
 
         expect(await getCollectionProgress(page, 'Base', 102)).toBe(102);
 
@@ -445,7 +451,7 @@ test.describe('Pokemon TCG Simulator', () => {
         // Start at the exact collection cap so any overflow would be visible immediately.
         await seedFullBaseBinder(page);
         await page.reload();
-        await page.getByRole('button', { name: /pokemon tcg simulator/i }).click();
+        await enterTcgSimulator(page);
 
         expect(await getCollectionProgress(page, 'Base', 102)).toBe(102);
         await page.getByRole('button', { name: 'Open 1 Pack' }).click();
@@ -479,7 +485,7 @@ test.describe('Pokemon TCG Simulator', () => {
         // Seed two sets so the test can prove single-binder and all-binder clearing differ.
         await seedBaseAndFossilBinders(page);
         await page.reload();
-        await page.getByRole('button', { name: /pokemon tcg simulator/i }).click();
+        await enterTcgSimulator(page);
 
         expect(await getCollectionProgress(page, 'Base', 102)).toBe(1);
 
@@ -520,7 +526,7 @@ test.describe('Pokemon TCG Simulator', () => {
         // Use deterministic seeded cards so both Base and Fossil have known progress.
         await seedBaseAndFossilBinders(page);
         await page.reload();
-        await page.getByRole('button', { name: /pokemon tcg simulator/i }).click();
+        await enterTcgSimulator(page);
 
         expect(await getCollectionProgress(page, 'Base', 102)).toBe(1);
 
@@ -565,7 +571,7 @@ test.describe('Pokemon TCG Simulator', () => {
         expect(await getCollectionProgress(page, 'Base', 102)).toBe(0);
 
         await page.reload();
-        await page.getByRole('button', { name: /pokemon tcg simulator/i }).click();
+        await enterTcgSimulator(page);
 
         expect(await getCollectionProgress(page, 'Base', 102)).toBe(0);
       });
@@ -577,7 +583,7 @@ test.describe('Pokemon TCG Simulator', () => {
           // Seed one Base card with count 2 to separate "owned copies" from unique progress.
           await seedDuplicatedBaseCard(page);
           await page.reload();
-          await page.getByRole('button', { name: /pokemon tcg simulator/i }).click();
+          await enterTcgSimulator(page);
 
           expect(await getCollectionProgress(page, 'Base', 102)).toBe(1);
           await expect(page.getByLabel('Collection binder')).toContainText(/AbraOwned x 2/);
