@@ -291,6 +291,26 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(pokemonListButton(page, 7, 'Mudkip')).toBeHidden();
     });
 
+    // Verifies changing regional Pokedex filters does not reset an in-progress team.
+    teamPlannerTest('Changing game Pokedex keeps the selected team intact', async ({ page }) => {
+      await pokemonListButton(page, 1, 'Bulbasaur').click();
+
+      await expect(page.getByText('1/6 selected')).toBeVisible();
+      await expect(page.getByRole('button', { name: /^remove bulbasaur$/i })).toBeVisible();
+
+      await gamePokedexSelect(page).selectOption({ label: 'Ruby / Sapphire / Emerald' });
+
+      await expect(gamePokedexSelect(page).locator('option:checked')).toHaveText(
+        'Ruby / Sapphire / Emerald'
+      );
+      await expect(pokemonListButton(page, 1, 'Treecko')).toBeVisible();
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeHidden();
+      await expect(page.getByText('1/6 selected')).toBeVisible();
+      await expect(page.getByRole('button', { name: /^remove bulbasaur$/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /^remove all$/i })).toBeEnabled();
+      await expect(analysisTypeBadge(page, 'Fire x1')).toBeVisible();
+    });
+
     // Verifies sort changes preserve the active regional Pokedex selection.
     teamPlannerTest('Sorting does not clear an active game Pokedex filter', async ({ page }) => {
       await gamePokedexSelect(page).selectOption({ label: 'Ruby / Sapphire / Emerald' });
