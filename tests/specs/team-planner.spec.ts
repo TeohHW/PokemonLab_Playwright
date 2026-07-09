@@ -44,6 +44,10 @@ test.describe('@live Pokemon Team Planner', () => {
     return page.locator('button').filter({ hasText: /^#\d{3}\s*/ });
   }
 
+  function plannerPageLabel(page: Page, currentPage: number, totalPages: number) {
+    return page.getByText(new RegExp(`^Page ${currentPage} / ${totalPages}$`, 'i'));
+  }
+
   // Locates one of the selected Pokemon move selectors.
   function moveSelect(page: Page, moveNumber: number) {
     return page.getByRole('combobox', { name: new RegExp(`^move ${moveNumber}$`, 'i') });
@@ -54,6 +58,10 @@ test.describe('@live Pokemon Team Planner', () => {
     return page
       .getByRole('article')
       .filter({ has: page.getByRole('heading', { name: /^average stats$/i }) });
+  }
+
+  function analysisTypeBadge(page: Page, label: string) {
+    return page.getByRole('img', { name: new RegExp(`^${label}$`, 'i') });
   }
 
   // Reads Pokemon names from currently visible planner result buttons.
@@ -82,8 +90,41 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(sortPokemonSelect(page)).toHaveValue('entry');
       await expect(page.getByText('0/6 selected')).toBeVisible();
       await expect(page.getByRole('button', { name: /^remove all$/i })).toBeDisabled();
+      await expect(plannerPageLabel(page, 1, 7)).toBeVisible();
+      await expect(pokemonListButtons(page)).toHaveCount(24);
       await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
+      await expect(pokemonListButton(page, 24, 'Arbok')).toBeVisible();
+      await expect(pokemonListButton(page, 25, 'Pikachu')).toBeHidden();
       await expect(page.getByText('Add Pokemon to scan team weaknesses.')).toBeVisible();
+    });
+
+    // Verifies the planner result pager advances one page and can return to the first page.
+    teamPlannerTest('Navigates Pokemon result pages', async ({ page }) => {
+      const previousPageButton = page.getByRole('button', { name: /^prev$/i });
+      const nextPageButton = page.getByRole('button', { name: /^next$/i });
+
+      await expect(plannerPageLabel(page, 1, 7)).toBeVisible();
+      await expect(previousPageButton).toBeDisabled();
+      await expect(nextPageButton).toBeEnabled();
+      await expect(pokemonListButtons(page)).toHaveCount(24);
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
+      await expect(pokemonListButton(page, 24, 'Arbok')).toBeVisible();
+
+      await nextPageButton.click();
+
+      await expect(plannerPageLabel(page, 2, 7)).toBeVisible();
+      await expect(previousPageButton).toBeEnabled();
+      await expect(pokemonListButtons(page)).toHaveCount(24);
+      await expect(pokemonListButton(page, 25, 'Pikachu')).toBeVisible();
+      await expect(pokemonListButton(page, 48, 'Venonat')).toBeVisible();
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeHidden();
+
+      await previousPageButton.click();
+
+      await expect(plannerPageLabel(page, 1, 7)).toBeVisible();
+      await expect(previousPageButton).toBeDisabled();
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
+      await expect(pokemonListButton(page, 25, 'Pikachu')).toBeHidden();
     });
 
     // Verifies the planner shell stays usable while Pokemon API responses are delayed.
@@ -296,7 +337,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(page.getByRole('button', { name: /^remove bulbasaur$/i })).toBeVisible();
       await expect(page.getByText('Bulbasaur').last()).toBeVisible();
       await expect(page.getByText('WEAKNESSES')).toBeVisible();
-      await expect(page.getByText(/Fire x1/i)).toBeVisible();
+      await expect(analysisTypeBadge(page, 'Fire x1')).toBeVisible();
     });
 
     // Verifies a full team shows six occupied slots and disables additional Pokemon choices.
@@ -407,9 +448,9 @@ test.describe('@live Pokemon Team Planner', () => {
 
       await expect(moveSelect(page, 1).locator('option:checked')).toContainText(/Vine Whip/i);
       await expect(page.getByRole('heading', { name: /^strong against$/i })).toBeVisible();
-      await expect(page.getByText(/^Ground$/)).toBeVisible();
-      await expect(page.getByText(/^Rock$/)).toBeVisible();
-      await expect(page.getByText(/^Water$/)).toBeVisible();
+      await expect(analysisTypeBadge(page, 'Ground')).toBeVisible();
+      await expect(analysisTypeBadge(page, 'Rock')).toBeVisible();
+      await expect(analysisTypeBadge(page, 'Water')).toBeVisible();
     });
 
     // Verifies clearing a selected move leaves the move slot empty.
@@ -432,11 +473,11 @@ test.describe('@live Pokemon Team Planner', () => {
 
         await expect(page.getByText('2/6 selected')).toBeVisible();
         await expect(page.getByRole('heading', { name: /^weaknesses$/i })).toBeVisible();
-        await expect(page.getByText(/Water x1/i)).toBeVisible();
-        await expect(page.getByText(/Rock x1/i)).toBeVisible();
+        await expect(analysisTypeBadge(page, 'Water x1')).toBeVisible();
+        await expect(analysisTypeBadge(page, 'Rock x1')).toBeVisible();
         await expect(page.getByRole('heading', { name: /^resistances$/i })).toBeVisible();
-        await expect(page.getByText(/Fire resist 1/i)).toBeVisible();
-        await expect(page.getByText(/Grass resist 2/i)).toBeVisible();
+        await expect(analysisTypeBadge(page, 'Fire resist 1')).toBeVisible();
+        await expect(analysisTypeBadge(page, 'Grass resist 2')).toBeVisible();
         await expect(averageStatsPanel(page).getByText(/^42$/).first()).toBeVisible();
       }
     );
@@ -569,7 +610,8 @@ test.describe('@live Pokemon Team Planner', () => {
 
       await expect(page.getByRole('heading', { name: /pokemon team planner/i })).toBeVisible();
       await expect(gamePokedexSelect(page)).toBeEnabled();
-      await expect(sortPokemonSelect(page)).toBeDisabled();
+      await expect(sortPokemonSelect(page)).toBeVisible();
+      await expect(sortPokemonSelect(page)).toHaveValue('entry');
       await expect(page.getByRole('button', { name: /^randomize team$/i })).toBeVisible();
       await expect(page.getByText('0/6 selected')).toBeVisible();
       await expect(pokemonListButtons(page)).toHaveCount(0);
@@ -577,6 +619,7 @@ test.describe('@live Pokemon Team Planner', () => {
       releasePokemonRequests();
 
       await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible({ timeout: 30_000 });
+      await expect(plannerPageLabel(page, 1, 7)).toBeVisible();
       await expect(sortPokemonSelect(page)).toBeEnabled();
       await expect(page.getByRole('button', { name: /^randomize team$/i })).toBeEnabled();
     });

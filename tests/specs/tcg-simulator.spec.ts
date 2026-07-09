@@ -217,6 +217,30 @@ test.describe('Pokemon TCG Simulator', () => {
     return page.getByRole('button', { name: /\b\d{4}\b/ });
   }
 
+  // Locates a Special / Limited reference set by its user-facing set name.
+  function referenceSetButton(page: Page, setName: string) {
+    return page.getByRole('button', {
+      name: new RegExp(setName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
+    });
+  }
+
+  // Locates a card name inside the selected binder, avoiding similarly named expansion results.
+  function binderCardName(page: Page, cardName: string) {
+    return page
+      .getByLabel('Collection binder')
+      .getByRole('heading', { name: new RegExp(`^${cardName}$`, 'i') });
+  }
+
+  // Verifies reference-only binders use the complete-by-default messaging instead of pack progress.
+  async function expectReferenceOnlyBinder(page: Page, setName: string) {
+    const binder = page.getByLabel('Collection binder');
+
+    await expect(binder).toContainText(
+      `${setName} is reference-only and shown complete by default.`
+    );
+    await expect(binder).toContainText('100%');
+  }
+
   test.describe('TCG simulator station', () => {
     test.describe('Session', () => {
       // Verifies the simulator opens with default Base controls and an empty binder.
@@ -564,29 +588,29 @@ test.describe('Pokemon TCG Simulator', () => {
       tcgTest('Binder card search filters cards within selected set', async ({ page }) => {
         await page.getByPlaceholder('Search Pokemon in this set...').fill('pika');
 
-        await expect(page.getByText('PIKACHU')).toBeVisible();
-        await expect(page.getByText('ABRA')).toBeHidden();
+        await expect(binderCardName(page, 'Pikachu')).toBeVisible();
+        await expect(binderCardName(page, 'Abra')).toBeHidden();
       });
 
       // Verifies invalid binder-card search hides card rows without affecting binder progress.
       tcgTest('Binder card search invalid term shows no cards', async ({ page }) => {
         await page.getByPlaceholder('Search Pokemon in this set...').fill('not-a-card');
 
-        await expect(page.getByText('PIKACHU')).toBeHidden();
-        await expect(page.getByText('ABRA')).toBeHidden();
+        await expect(binderCardName(page, 'Pikachu')).toBeHidden();
+        await expect(binderCardName(page, 'Abra')).toBeHidden();
         expect(await getCollectionProgress(page, 'Base', 102)).toBe(0);
       });
 
       // Verifies clearing binder-card search restores the selected set's full card list.
       tcgTest('Clearing binder card search restores all binder cards', async ({ page }) => {
         await page.getByPlaceholder('Search Pokemon in this set...').fill('pika');
-        await expect(page.getByText('PIKACHU')).toBeVisible();
-        await expect(page.getByText('ABRA')).toBeHidden();
+        await expect(binderCardName(page, 'Pikachu')).toBeVisible();
+        await expect(binderCardName(page, 'Abra')).toBeHidden();
 
         await page.getByPlaceholder('Search Pokemon in this set...').fill('');
 
-        await expect(page.getByText('PIKACHU')).toBeVisible();
-        await expect(page.getByText(/^ABRA$/i)).toBeVisible();
+        await expect(binderCardName(page, 'Pikachu')).toBeVisible();
+        await expect(binderCardName(page, 'Abra')).toBeVisible();
       });
     });
 
@@ -643,6 +667,66 @@ test.describe('Pokemon TCG Simulator', () => {
         for (const visibleSetText of visibleSetTexts) {
           expect(visibleSetText.toUpperCase()).toContain('SUN & MOON');
         }
+      });
+
+      // Verifies the Special / Limited section explains its reference-only behavior.
+      tcgTest('Special Limited section explains reference-only sets', async ({ page }) => {
+        await page.getByRole('button', { name: /^special \/ limited$/i }).click();
+
+        await expect(page.getByText(/Special and limited sets include promos/i)).toBeVisible();
+        await expect(
+          page.getByText(/not eligible for pack opening/i)
+        ).toBeVisible();
+        await expect(
+          page.getByText(/binders are shown complete by default for browsing only/i)
+        ).toBeVisible();
+        await expect(referenceSetButton(page, 'Wizards Black Star Promos')).toBeVisible();
+        await expect(referenceSetButton(page, 'Southern Islands')).toBeVisible();
+      });
+
+      // Verifies selecting a reference set disables direct pack opening and shows a complete binder.
+      tcgTest('Special Limited reference set cannot be opened as a pack', async ({ page }) => {
+        await page.getByRole('button', { name: /^special \/ limited$/i }).click();
+        await referenceSetButton(page, 'Wizards Black Star Promos').click();
+
+        await expectReferenceOnlyBinder(page, 'Wizards Black Star Promos');
+        await expect(openOnePackButton(page)).toBeDisabled();
+        await expect(page.getByRole('button', { name: /^open 10 packs$/i })).toBeDisabled();
+        await expect(page.getByRole('button', { name: /^open god pack$/i })).toBeDisabled();
+        await expect(page.getByRole('button', { name: /^open random pack$/i })).toBeEnabled();
+        await expect(page.getByRole('button', { name: 'Clear This Binder' })).toBeDisabled();
+        await expect(page.getByRole('button', { name: 'Clear All Binders' })).toBeDisabled();
+        await expect(packDialog(page)).toHaveCount(0);
+      });
+
+      // Verifies searching can find a limited release and keeps the reference-only safeguards.
+      tcgTest('Search can select a limited reference set', async ({ page }) => {
+        await expansionSearchInput(page).fill("McDonald's Collection 2011");
+
+        const limitedSet = referenceSetButton(page, "McDonald's Collection 2011");
+        await expect(limitedSet).toBeVisible();
+        await limitedSet.click();
+
+        await expectReferenceOnlyBinder(page, "McDonald's Collection 2011");
+        await expect(openOnePackButton(page)).toBeDisabled();
+        await expect(page.getByRole('button', { name: 'Clear This Binder' })).toBeDisabled();
+      });
+
+      // Verifies leaving a reference-only set restores normal booster controls.
+      tcgTest('Switching from Special Limited back to booster set restores pack controls', async ({
+        page
+      }) => {
+        await page.getByRole('button', { name: /^special \/ limited$/i }).click();
+        await referenceSetButton(page, 'Wizards Black Star Promos').click();
+        await expect(openOnePackButton(page)).toBeDisabled();
+
+        await page.getByRole('button', { name: /^base$/i }).click();
+        await expansionSetButton(page, 'Base', 'Base', 1999).click();
+
+        expect(await getCollectionProgress(page, 'Base', 102)).toBe(0);
+        await expect(openOnePackButton(page)).toBeEnabled();
+        await expect(page.getByRole('button', { name: /^open 10 packs$/i })).toBeEnabled();
+        await expect(page.getByRole('button', { name: /^open god pack$/i })).toBeEnabled();
       });
     });
 
@@ -771,13 +855,19 @@ test.describe('Pokemon TCG Simulator', () => {
       tcgTest('Search by Pokemon lists sets containing that Pokemon', async ({ page }) => {
         await expansionSearchInput(page).fill('Sirfetchd');
 
-        await expect(page.getByText('4 cards found for Sirfetchd')).toBeVisible();
+        await expect(page.getByText('6 cards found for Sirfetchd')).toBeVisible();
+        await expect(
+          expansionSetButton(page, 'SWSH Black Star Promos', 'Sword & Shield', 2019)
+        ).toBeVisible();
         await expect(expansionSetButton(page, 'Rebel Clash', 'Sword & Shield', 2020)).toBeVisible();
         await expect(
           expansionSetButton(page, 'Darkness Ablaze', 'Sword & Shield', 2020)
         ).toBeVisible();
         await expect(
           expansionSetButton(page, 'Vivid Voltage', 'Sword & Shield', 2020)
+        ).toBeVisible();
+        await expect(
+          expansionSetButton(page, 'Shining Fates Shiny Vault', 'Sword & Shield', 2021)
         ).toBeVisible();
         await expect(
           expansionSetButton(page, 'Chilling Reign', 'Sword & Shield', 2021)

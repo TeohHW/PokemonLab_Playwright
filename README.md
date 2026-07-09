@@ -6,15 +6,16 @@ The suite is written to be readable as a small portfolio project: tests are grou
 
 ## Test Scope
 
-The app currently has five stations under test:
+The app currently has six stations under test:
 
-| Station               | Spec                                    | Unique tests | Current coverage                                                                                                                                                                    |
-| --------------------- | --------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pokemon Pokedex       | `tests/specs/pokedex.spec.ts`           | 39           | Initial load, search, details, game Pokedex filters, sorting, random Pokemon, image fallback, and rapid action reliability                                                          |
-| Pokemon TCG Simulator | `tests/specs/tcg-simulator.spec.ts`     | 38           | Session startup, pack opening, pack modal behavior, binder progress, collection clearing, set selection, set filtering/sorting, and Pokemon/card search                             |
-| Who's That Pokemon    | `tests/specs/whos-that-pokemon.spec.ts` | 36           | Setup, trainer validation, region selection, gameplay, guessing flow, help choices, leaderboard handling, navigation, local storage reliability, and network/image failure behavior |
-| Pokemon Team Planner  | `tests/specs/team-planner.spec.ts`      | 29           | Station startup, Pokemon search, sorting, game Pokedex filtering, team building/removal, random teams, move selection, matchup/stat analysis, navigation, and reliability checks    |
-| Pokemon Quiz          | `tests/specs/pokemon-quiz.spec.ts`      | 27           | Station startup, quiz pool/category selection, playable questions, scoring panel updates, reset behavior, navigation, and rapid-start reliability                                   |
+| Station               | Spec                                    | Unique tests | Current coverage                                                                                                                                                                                           |
+| --------------------- | --------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pokemon Pokedex       | `tests/specs/pokedex.spec.ts`           | 40           | Initial load, paged Pokemon navigation, search, details, game Pokedex filters, sorting, random Pokemon, image fallback, and rapid action reliability                                                       |
+| Pokemon TCG Simulator | `tests/specs/tcg-simulator.spec.ts`     | 42           | Session startup, pack opening, pack modal behavior, binder progress, collection clearing, set selection, Special / Limited reference sets, set filtering/sorting, and Pokemon/card search                  |
+| Who's That Pokemon    | `tests/specs/whos-that-pokemon.spec.ts` | 36           | Setup, trainer validation, region selection, gameplay, guessing flow, help choices, leaderboard handling, navigation, local storage reliability, and network/image failure behavior                        |
+| Pokemon Team Planner  | `tests/specs/team-planner.spec.ts`      | 30           | Station startup, paged Pokemon navigation, Pokemon search, sorting, game Pokedex filtering, team building/removal, random teams, move selection, matchup/stat analysis, navigation, and reliability checks |
+| Pokemon Quiz          | `tests/specs/pokemon-quiz.spec.ts`      | 27           | Station startup, quiz pool/category selection, playable questions, scoring panel updates, reset behavior, navigation, and rapid-start reliability                                                          |
+| TrainerDex            | `tests/specs/trainerdex.spec.ts`        | 20           | Station startup, trainer search, region and game-version selection, trainer detail panels, team Pokemon TCG-card modal behavior, image fallback, delayed data, and rapid action reliability                |
 
 These station tests pass across the configured Chromium, desktop Firefox, desktop WebKit, and mobile Chrome Playwright projects, with the TCG simulator spec skipped only on CI WebKit because it is flaky there while remaining covered by the other browser projects and local WebKit runs.
 
@@ -25,6 +26,7 @@ These station tests pass across the configured Chromium, desktop Firefox, deskto
 - Filtering and sorting interactions, including combinations that should preserve active state
 - Detail views, modals, and selected item panels
 - State changes such as score updates, binder progress, team count, and leaderboard entries
+- Reference-only TCG sets, including disabled pack opening and complete-by-default binders
 - Negative and edge cases such as empty input, special characters, out-of-range values, corrupted local storage, failed image requests, and delayed data
 - Reliability checks for rapid user actions such as repeated search/clear, random selection, help, guess, pack opening, and start/reset flows
 - Navigation back to the station chooser
@@ -32,7 +34,7 @@ These station tests pass across the configured Chromium, desktop Firefox, deskto
 ## Test Design Notes
 
 - Uses Playwright's role-based locators where practical, so tests follow the user-facing UI instead of brittle implementation details.
-- Uses station-level fixtures for repeated setup such as opening Pokedex, TCG Simulator, Team Planner, Pokemon Quiz, and Who's That Pokemon.
+- Uses station-level fixtures for repeated setup such as opening Pokedex, TCG Simulator, Team Planner, Pokemon Quiz, Who's That Pokemon, and TrainerDex.
 - Keeps assertions focused on behavior that matters to users: visible controls, updated counters, stable state, and usable recovery after edge cases.
 - Normal test runs exclude `@live` specs and run across the configured Playwright projects: Chromium, Firefox, WebKit, and mobile Chrome.
 - Live PokeAPI-backed specs are tagged `@live`, run separately in Chromium only, and use a persistent browser profile so IndexedDB cache can be reused between live runs.
@@ -56,7 +58,7 @@ npm.cmd test
 Set the target site in `.env`:
 
 ```env
-BASE_URL=https://pokemon-tcg-simulator-react.vercel.app/
+BASE_URL=https://pokemon-lab-react.vercel.app/
 ```
 
 ## Common Commands
