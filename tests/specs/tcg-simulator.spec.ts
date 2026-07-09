@@ -674,9 +674,7 @@ test.describe('Pokemon TCG Simulator', () => {
         await page.getByRole('button', { name: /^special \/ limited$/i }).click();
 
         await expect(page.getByText(/Special and limited sets include promos/i)).toBeVisible();
-        await expect(
-          page.getByText(/not eligible for pack opening/i)
-        ).toBeVisible();
+        await expect(page.getByText(/not eligible for pack opening/i)).toBeVisible();
         await expect(
           page.getByText(/binders are shown complete by default for browsing only/i)
         ).toBeVisible();
@@ -713,21 +711,22 @@ test.describe('Pokemon TCG Simulator', () => {
       });
 
       // Verifies leaving a reference-only set restores normal booster controls.
-      tcgTest('Switching from Special Limited back to booster set restores pack controls', async ({
-        page
-      }) => {
-        await page.getByRole('button', { name: /^special \/ limited$/i }).click();
-        await referenceSetButton(page, 'Wizards Black Star Promos').click();
-        await expect(openOnePackButton(page)).toBeDisabled();
+      tcgTest(
+        'Switching from Special Limited back to booster set restores pack controls',
+        async ({ page }) => {
+          await page.getByRole('button', { name: /^special \/ limited$/i }).click();
+          await referenceSetButton(page, 'Wizards Black Star Promos').click();
+          await expect(openOnePackButton(page)).toBeDisabled();
 
-        await page.getByRole('button', { name: /^base$/i }).click();
-        await expansionSetButton(page, 'Base', 'Base', 1999).click();
+          await page.getByRole('button', { name: /^base$/i }).click();
+          await expansionSetButton(page, 'Base', 'Base', 1999).click();
 
-        expect(await getCollectionProgress(page, 'Base', 102)).toBe(0);
-        await expect(openOnePackButton(page)).toBeEnabled();
-        await expect(page.getByRole('button', { name: /^open 10 packs$/i })).toBeEnabled();
-        await expect(page.getByRole('button', { name: /^open god pack$/i })).toBeEnabled();
-      });
+          expect(await getCollectionProgress(page, 'Base', 102)).toBe(0);
+          await expect(openOnePackButton(page)).toBeEnabled();
+          await expect(page.getByRole('button', { name: /^open 10 packs$/i })).toBeEnabled();
+          await expect(page.getByRole('button', { name: /^open god pack$/i })).toBeEnabled();
+        }
+      );
     });
 
     test.describe('Search', () => {
