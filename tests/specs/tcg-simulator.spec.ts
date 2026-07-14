@@ -779,14 +779,15 @@ test.describe('Pokemon TCG Simulator', () => {
         await expect(expansionSetButton(page, 'Fossil', 'Base', 1999)).toBeVisible();
       });
 
-      // Verifies special characters in expansion search fail safely by leaving the set list usable.
-      tcgTest('Search special characters keeps all sets visible', async ({ page }) => {
+      // Verifies a special-character-only expansion search shows validation and no set results.
+      tcgTest('Special-character-only search shows validation and no sets', async ({ page }) => {
         await expansionSearchInput(page).fill('@@@');
 
         await expect(expansionSearchInput(page)).toHaveValue('@@@');
-        await expect(expansionSetButton(page, 'Base', 'Base', 1999)).toBeVisible();
-        await expect(expansionSetButton(page, 'Jungle', 'Base', 1999)).toBeVisible();
-        await expect(expansionSetButton(page, 'Fossil', 'Base', 1999)).toBeVisible();
+        await expect(
+          page.getByText('Enter letters or numbers to search sets and cards.', { exact: true })
+        ).toBeVisible();
+        await expect(expansionSetButtons(page)).toHaveCount(0);
       });
 
       // Verifies expansion search ignores case and supports partial search text.
