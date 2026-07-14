@@ -29,6 +29,7 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@playwright/mcp": "^0.0.78",
     "@playwright/test": "^1.54.2",
     "@types/node": "^24.0.10",
     "dotenv": "^17.0.1",

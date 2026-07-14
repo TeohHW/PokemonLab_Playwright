@@ -1,0 +1,4 @@
+[mcp_servers.playwright]
+command = "npx"
+args = ["--no-install", "playwright-mcp"]
+startup_timeout_sec = 30
