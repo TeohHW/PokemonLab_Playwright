@@ -510,7 +510,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(page.getByRole('button', { name: /^home$/i })).toBeVisible();
       await page.getByRole('button', { name: /^home$/i }).click();
 
-      await expect(page.getByText(/choose your station/i)).toBeVisible();
+      await expect(page.getByText(/choose (?:your|a) station/i)).toBeVisible();
       await expect(page.getByRole('button', { name: /pokemon team planner/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /pokemon quiz/i })).toBeVisible();
     });
@@ -537,7 +537,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(page.getByText('1/6 selected')).toBeVisible();
       await page.reload();
 
-      await expect(page.getByText(/choose your station/i)).toBeVisible();
+      await expect(page.getByText(/choose (?:your|a) station/i)).toBeVisible();
       await page.getByRole('button', { name: /pokemon team planner/i }).click();
 
       await expect(page.getByRole('heading', { name: /pokemon team planner/i })).toBeVisible();

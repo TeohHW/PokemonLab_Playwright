@@ -249,7 +249,7 @@ test.describe('@live Pokemon Pokedex', () => {
         await expect(page.getByRole('button', { name: /^home$/i })).toBeVisible();
         await page.getByRole('button', { name: /^home$/i }).click();
 
-        await expect(page.getByText(/choose your station/i)).toBeVisible();
+        await expect(page.getByText(/choose (?:your|a) station/i)).toBeVisible();
         await expect(page.getByRole('button', { name: /pokemon tcg simulator/i })).toBeVisible();
         await expect(
           page.getByRole('button', { name: /search pokemon by name or number/i })

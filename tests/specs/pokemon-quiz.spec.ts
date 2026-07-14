@@ -506,7 +506,7 @@ test.describe('@live Pokemon Quiz', () => {
       await expect(page.getByRole('button', { name: /^home$/i })).toBeVisible();
       await page.getByRole('button', { name: /^home$/i }).click();
 
-      await expect(page.getByText(/choose your station/i)).toBeVisible();
+      await expect(page.getByText(/choose (?:your|a) station/i)).toBeVisible();
       await expect(page.getByRole('button', { name: /pokemon team planner/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /pokemon quiz/i })).toBeVisible();
     });
@@ -521,6 +521,41 @@ test.describe('@live Pokemon Quiz', () => {
       await expect(stationMenu).toBeHidden();
       await expectPlayableQuestion(page);
     });
+    // Verifies cancelling the leave confirmation keeps the active quiz question intact.
+    pokemonQuizTest('Staying after the active quiz warning preserves state', async ({ page }) => {
+      await page.getByRole('button', { name: /^start quiz$/i }).click();
+      await expectPlayableQuestion(page);
+
+      await page.getByRole('button', { name: /^menu$/i }).click();
+      await page.getByRole('button', { name: /^home$/i }).click();
+
+      const leaveQuizDialog = page.getByRole('dialog', { name: /leave quiz/i });
+      await expect(leaveQuizDialog).toBeVisible();
+      await expect(leaveQuizDialog).toContainText(/current pokemon quiz session will end/i);
+      await leaveQuizDialog.getByRole('button', { name: /^stay$/i }).click();
+
+      await expect(leaveQuizDialog).toBeHidden();
+      await expectPlayableQuestion(page);
+    });
+    // Verifies leaving an active quiz requires confirmation before returning home.
+    pokemonQuizTest(
+      'Menu during an active quiz confirms before returning home',
+      async ({ page }) => {
+        await page.getByRole('button', { name: /^start quiz$/i }).click();
+        await expectPlayableQuestion(page);
+
+        await page.getByRole('button', { name: /^menu$/i }).click();
+        await page.getByRole('button', { name: /^home$/i }).click();
+
+        const leaveQuizDialog = page.getByRole('dialog', { name: /leave quiz/i });
+        await expect(leaveQuizDialog).toBeVisible();
+        await leaveQuizDialog.getByRole('button', { name: /^leave$/i }).click();
+
+        await expect(page.getByText(/choose (?:your|a) station/i)).toBeVisible();
+        await expect(page.getByRole('button', { name: /pokemon quiz/i })).toBeVisible();
+        await expect(page.getByRole('button', { name: /pokemon tcg simulator/i })).toBeVisible();
+      }
+    );
     // Verifies reloading from Quiz returns to the station chooser instead of a broken partial quiz.
     pokemonQuizTest('Browser reload returns to a stable quiz state', async ({ page }) => {
       await page.getByRole('button', { name: /^start quiz$/i }).click();
@@ -528,7 +563,7 @@ test.describe('@live Pokemon Quiz', () => {
 
       await page.reload();
 
-      await expect(page.getByText(/choose your station/i)).toBeVisible();
+      await expect(page.getByText(/choose (?:your|a) station/i)).toBeVisible();
       await expect(page.getByRole('button', { name: /pokemon quiz/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /pokemon tcg simulator/i })).toBeVisible();
 

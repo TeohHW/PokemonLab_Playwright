@@ -14,7 +14,7 @@ The app currently has six stations under test:
 | Pokemon TCG Simulator | `tests/specs/tcg-simulator.spec.ts`     | 42           | Session startup, pack opening, pack modal behavior, binder progress, collection clearing, set selection, Special / Limited reference sets, set filtering/sorting, and Pokemon/card search                                     |
 | Who's That Pokemon    | `tests/specs/whos-that-pokemon.spec.ts` | 36           | Setup, trainer validation, region selection, gameplay, guessing flow, help choices, leaderboard handling, navigation, local storage reliability, and network/image failure behavior                                           |
 | Pokemon Team Planner  | `tests/specs/team-planner.spec.ts`      | 31           | Station startup, paged Pokemon navigation, Pokemon search, sorting, game Pokedex filtering without team reset, team building/removal, random teams, move selection, matchup/stat analysis, navigation, and reliability checks |
-| Pokemon Quiz          | `tests/specs/pokemon-quiz.spec.ts`      | 27           | Station startup, quiz pool/category selection, playable questions, scoring panel updates, reset behavior, navigation, and rapid-start reliability                                                                             |
+| Pokemon Quiz          | `tests/specs/pokemon-quiz.spec.ts`      | 29           | Station startup, quiz pool/category selection, playable questions, scoring panel updates, reset behavior, active-quiz leave confirmation, navigation, and rapid-start reliability                                             |
 | TrainerDex            | `tests/specs/trainerdex.spec.ts`        | 20           | Station startup, trainer search, region and game-version selection, trainer detail panels, team Pokemon TCG-card modal behavior, image fallback, delayed data, and rapid action reliability                                   |
 
 These station tests pass across the configured Chromium, desktop Firefox, desktop WebKit, and mobile Chrome Playwright projects, with the TCG simulator spec skipped only on CI WebKit because it is flaky there while remaining covered by the other browser projects and local WebKit runs.
@@ -29,7 +29,7 @@ These station tests pass across the configured Chromium, desktop Firefox, deskto
 - Reference-only TCG sets, including disabled pack opening and complete-by-default binders
 - Negative and edge cases such as empty input, special characters, out-of-range values, corrupted local storage, failed image requests, and delayed data
 - Reliability checks for rapid user actions such as repeated search/clear, random selection, help, guess, pack opening, and start/reset flows
-- Navigation back to the station chooser
+- Navigation back to the station chooser, including confirmation and state preservation when leaving an active game or quiz
 
 ## Test Design Notes
 

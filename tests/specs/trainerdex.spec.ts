@@ -110,7 +110,7 @@ test.describe('@live TrainerDex', () => {
       await expect(page.getByRole('button', { name: /^home$/i })).toBeVisible();
       await page.getByRole('button', { name: /^home$/i }).click();
 
-      await expect(page.getByText(/choose your station/i)).toBeVisible();
+      await expect(page.getByText(/choose (?:your|a) station/i)).toBeVisible();
       await expect(page.getByRole('button', { name: /trainerdex/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /pokemon team planner/i })).toBeVisible();
     });
