@@ -243,6 +243,39 @@ test.describe('Pokemon TCG Simulator', () => {
       .getByRole('heading', { name: new RegExp(`^${cardName}$`, 'i') });
   }
 
+  function binderSortSelect(page: Page) {
+    return page.getByLabel('Collection binder').getByLabel('Sort binder cards');
+  }
+
+  async function visibleBinderCardRarities(page: Page) {
+    const cardTexts = await page
+      .getByLabel('Collection binder')
+      .getByRole('button')
+      .filter({ hasText: /Owned x \d+/ })
+      .allTextContents();
+
+    return cardTexts.map((cardText) => {
+      const rarity = cardText.match(/(Rare Holo|Rare|Uncommon|Common)\s*·\s*Owned x \d+/i)?.[1];
+
+      expect(rarity, `Binder card should expose a rarity: ${cardText}`).toBeTruthy();
+      return rarity?.toLowerCase() ?? '';
+    });
+  }
+
+  function expectRaritiesInDescendingOrder(rarities: string[]) {
+    const rarityRank: Record<string, number> = {
+      'rare holo': 0,
+      rare: 1,
+      uncommon: 2,
+      common: 3
+    };
+
+    expect(rarities.length).toBeGreaterThan(0);
+    expect(rarities.map((rarity) => rarityRank[rarity])).toEqual(
+      [...rarities].map((rarity) => rarityRank[rarity]).sort((left, right) => left - right)
+    );
+  }
+
   // Verifies reference-only binders use the complete-by-default messaging instead of pack progress.
   async function expectReferenceOnlyBinder(page: Page, setName: string) {
     const binder = page.getByLabel('Collection binder');
@@ -623,6 +656,37 @@ test.describe('Pokemon TCG Simulator', () => {
 
         await expect(binderCardName(page, 'Pikachu')).toBeVisible();
         await expect(binderCardName(page, 'Abra')).toBeVisible();
+      });
+
+      // Verifies choosing Rarity groups the selected binder from rarest to most common.
+      tcgTest('Rarity sort orders binder cards by rarity', async ({ page }) => {
+        await binderSortSelect(page).selectOption('rarity');
+
+        await expect(binderSortSelect(page)).toHaveValue('rarity');
+        expectRaritiesInDescendingOrder(await visibleBinderCardRarities(page));
+      });
+
+      // Verifies binder search and rarity sorting can be combined without dropping either state.
+      tcgTest('Binder search preserves the active rarity sort', async ({ page }) => {
+        await binderSortSelect(page).selectOption('rarity');
+        await page.getByPlaceholder('Search Pokemon in this set...').fill('pika');
+
+        await expect(binderSortSelect(page)).toHaveValue('rarity');
+        await expect(binderCardName(page, 'Raichu')).toBeVisible();
+        await expect(binderCardName(page, 'Pikachu')).toBeVisible();
+        await expect(binderCardName(page, 'Abra')).toBeHidden();
+        expectRaritiesInDescendingOrder(await visibleBinderCardRarities(page));
+      });
+
+      // Verifies the chosen rarity ordering remains active when browsing another binder.
+      tcgTest('Switching sets preserves the active rarity sort', async ({ page }) => {
+        await binderSortSelect(page).selectOption('rarity');
+        await page.getByRole('button', { name: /fossil/i }).click();
+
+        expect(await getCollectionProgress(page, 'Fossil', 62)).toBe(0);
+        await expect(binderSortSelect(page)).toHaveValue('rarity');
+        await expect(binderCardName(page, 'Kabuto')).toBeVisible();
+        expectRaritiesInDescendingOrder(await visibleBinderCardRarities(page));
       });
     });
 

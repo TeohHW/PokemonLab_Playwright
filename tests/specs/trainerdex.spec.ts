@@ -44,7 +44,8 @@ test.describe('@live TrainerDex', () => {
       Kalos: /X\s*\/\s*Y\s+Kalos/i,
       Alola: /Sun\s*\/\s*Moon\s+Alola/i,
       Galar: /Sword\s*\/\s*Shield\s+Galar/i,
-      Paldea: /Scarlet\s*\/\s*Violet\s+Paldea/i
+      Paldea: /Scarlet\s*\/\s*Violet\s+Paldea/i,
+      'Lumiose City': /Legends:\s*Z-A\s+Lumiose City/i
     };
 
     return page.getByRole('complementary').getByRole('button', {
@@ -232,6 +233,19 @@ test.describe('@live TrainerDex', () => {
       await expect(trainerButton(page, 'Zinnia')).toBeVisible();
       await expect(trainerDetailHeading(page, 'Roxanne')).toBeVisible();
       await expect(trainerDetailText(page, 'Rustboro City Gym Leader')).toBeVisible();
+    });
+
+    // Verifies the new Legends: Z-A selection loads its Lumiose trainers and team data.
+    trainerDexTest('Legends Z-A exposes Lumiose City trainers and teams', async ({ page }) => {
+      await regionButton(page, 'Lumiose City').click();
+
+      await expect(trainerButton(page, 'Urbain')).toBeVisible();
+      await expect(trainerButton(page, 'Canari')).toBeVisible();
+      await expect(trainerDetailHeading(page, 'Urbain')).toBeVisible();
+      await expect(trainerDetailText(page, /^Legends: Z-A$/i)).toBeVisible();
+      await expect(teamPokemonButton(page, 'Croconaw')).toBeVisible();
+      await expect(teamPokemonButton(page, 'Pignite')).toBeVisible();
+      await expect(teamPokemonButton(page, 'Mega Manectric')).toBeVisible();
     });
 
     // Verifies game version switches keep the current region and refresh trainer detail data.

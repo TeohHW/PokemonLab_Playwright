@@ -430,6 +430,15 @@ test.describe('@live Pokemon Pokedex', () => {
       await expect(pokemonListButton(page, 255, 'Torchic')).toBeVisible();
       await expect(pokemonListButton(page, 258, 'Mudkip')).toBeVisible();
     });
+    // Verifies the Legends: Z-A Pokedex exposes its Lumiose roster rather than a generic region.
+    pokedexTest('Legends Z-A filter shows the Lumiose City Pokedex', async ({ page }) => {
+      await page.getByRole('button', { name: /Legends:\s*Z-A\s*Lumiose City/i }).click();
+
+      await expect(page.getByText(/^1-24 of \d+$/)).toBeVisible();
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
+      await expect(pokemonListButton(page, 25, 'Pikachu')).toBeVisible();
+      await expect(pokemonListButton(page, 10, 'Caterpie')).toBeHidden();
+    });
     // Verifies returning to All Games removes the active regional filter.
     pokedexTest(
       'All Games restores the full Pokedex list after a region filter',
