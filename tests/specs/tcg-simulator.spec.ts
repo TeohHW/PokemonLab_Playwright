@@ -217,6 +217,11 @@ test.describe('Pokemon TCG Simulator', () => {
     return page.getByRole('textbox').first();
   }
 
+  // Locates expansion sorting separately from the binder's card sorting control.
+  function expansionSortSelect(page: Page) {
+    return page.getByLabel('Sort sets');
+  }
+
   // Locates one Pokemon card search result by card name and expansion set.
   function pokemonCardResultButton(page: Page, cardName: string, setName: string) {
     return page.getByRole('button', {
@@ -243,8 +248,27 @@ test.describe('Pokemon TCG Simulator', () => {
       .getByRole('heading', { name: new RegExp(`^${cardName}$`, 'i') });
   }
 
+  function binderCardButton(page: Page, cardName: string) {
+    return page
+      .getByLabel('Collection binder')
+      .getByRole('button')
+      .filter({
+        has: page.getByRole('heading', { name: new RegExp(`^${cardName}$`, 'i') })
+      });
+  }
+
   function binderSortSelect(page: Page) {
     return page.getByLabel('Collection binder').getByLabel('Sort binder cards');
+  }
+
+  function rarityOrderButton(page: Page) {
+    return page.getByLabel('Collection binder').getByRole('button', { name: /Rarity order:/i });
+  }
+
+  function unownedArtworkToggle(page: Page) {
+    return page
+      .getByLabel('Collection binder')
+      .getByRole('button', { name: /Unowned card artwork:/i });
   }
 
   async function visibleBinderCardRarities(page: Page) {
@@ -273,6 +297,20 @@ test.describe('Pokemon TCG Simulator', () => {
     expect(rarities.length).toBeGreaterThan(0);
     expect(rarities.map((rarity) => rarityRank[rarity])).toEqual(
       [...rarities].map((rarity) => rarityRank[rarity]).sort((left, right) => left - right)
+    );
+  }
+
+  function expectRaritiesInAscendingOrder(rarities: string[]) {
+    const rarityRank: Record<string, number> = {
+      'rare holo': 0,
+      rare: 1,
+      uncommon: 2,
+      common: 3
+    };
+
+    expect(rarities.length).toBeGreaterThan(0);
+    expect(rarities.map((rarity) => rarityRank[rarity])).toEqual(
+      [...rarities].map((rarity) => rarityRank[rarity]).sort((left, right) => right - left)
     );
   }
 
@@ -625,7 +663,7 @@ test.describe('Pokemon TCG Simulator', () => {
           await enterTcgSimulator(page);
 
           expect(await getCollectionProgress(page, 'Base', 102)).toBe(1);
-          await expect(page.getByLabel('Collection binder')).toContainText(/AbraOwned x 2/);
+          await expect(binderCardButton(page, 'Abra')).toContainText(/Common\s*·\s*Owned x 2/i);
         }
       );
 
@@ -658,12 +696,45 @@ test.describe('Pokemon TCG Simulator', () => {
         await expect(binderCardName(page, 'Abra')).toBeVisible();
       });
 
-      // Verifies choosing Rarity groups the selected binder from rarest to most common.
-      tcgTest('Rarity sort orders binder cards by rarity', async ({ page }) => {
+      // Verifies the default card-number order and both directions of the optional rarity order.
+      tcgTest('Rarity sort supports most rare and most common first', async ({ page }) => {
+        await expect(binderSortSelect(page)).toHaveValue('number');
         await binderSortSelect(page).selectOption('rarity');
 
         await expect(binderSortSelect(page)).toHaveValue('rarity');
+        await expect(rarityOrderButton(page)).toHaveAttribute('aria-pressed', 'false');
+        await expect(rarityOrderButton(page)).toHaveAccessibleName(/most rare first/i);
         expectRaritiesInDescendingOrder(await visibleBinderCardRarities(page));
+
+        await rarityOrderButton(page).click();
+
+        await expect(rarityOrderButton(page)).toHaveAttribute('aria-pressed', 'true');
+        await expect(rarityOrderButton(page)).toHaveAccessibleName(/most common first/i);
+        expectRaritiesInAscendingOrder(await visibleBinderCardRarities(page));
+      });
+
+      // Verifies unowned binder artwork can be shown in color and returned to grayscale.
+      tcgTest('Unowned binder artwork toggles between grayscale and color', async ({ page }) => {
+        const toggle = unownedArtworkToggle(page);
+        const unownedCardImage = page
+          .getByLabel('Collection binder')
+          .getByRole('img', { name: 'Alakazam' });
+
+        await expect(binderCardButton(page, 'Alakazam')).toContainText(/Owned x 0/i);
+        await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+        await expect(toggle).toHaveAccessibleName(/grayscale.*switch to color/i);
+        await expect(unownedCardImage).toHaveCSS('filter', 'grayscale(1)');
+
+        await toggle.click();
+
+        await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+        await expect(toggle).toHaveAccessibleName(/color.*switch to grayscale/i);
+        await expect(unownedCardImage).toHaveCSS('filter', 'none');
+
+        await toggle.click();
+
+        await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+        await expect(unownedCardImage).toHaveCSS('filter', 'grayscale(1)');
       });
 
       // Verifies binder search and rarity sorting can be combined without dropping either state.
@@ -707,11 +778,11 @@ test.describe('Pokemon TCG Simulator', () => {
       // Verifies sort options reorder the visible expansion-set tiles.
       tcgTest('Sort sets by newest and by name', async ({ page }) => {
         // Newest-first should surface a 2026 set before older releases.
-        await page.getByRole('combobox').selectOption({ label: 'Release year: newest first' });
+        await expansionSortSelect(page).selectOption({ label: 'Release year: newest first' });
         await expect(expansionSetButtons(page).first()).toContainText('2026');
 
         // Name sorting puts the numeric "151" expansion first.
-        await page.getByRole('combobox').selectOption({ label: 'Name: A to Z' });
+        await expansionSortSelect(page).selectOption({ label: 'Name: A to Z' });
         await expect(expansionSetButtons(page).first()).toContainText(/^151/);
       });
 
@@ -733,7 +804,7 @@ test.describe('Pokemon TCG Simulator', () => {
       // Verifies sorting a filtered category keeps the category filter applied.
       tcgTest('Sort sets while series filter is active', async ({ page }) => {
         await page.getByRole('button', { name: /^sun & moon$/i }).click();
-        await page.getByRole('combobox').selectOption({ label: 'Release year: newest first' });
+        await expansionSortSelect(page).selectOption({ label: 'Release year: newest first' });
 
         const visibleSetTexts = await expansionSetButtons(page).evaluateAll((buttons) =>
           buttons.map((button) => button.textContent ?? '')
@@ -920,7 +991,7 @@ test.describe('Pokemon TCG Simulator', () => {
       // Verifies sorting a searched result set keeps the search filter active.
       tcgTest('Sort sets while search is active', async ({ page }) => {
         await expansionSearchInput(page).fill('Team up');
-        await page.getByRole('combobox').selectOption({ label: 'Name: A to Z' });
+        await expansionSortSelect(page).selectOption({ label: 'Name: A to Z' });
 
         await expect(expansionSearchInput(page)).toHaveValue('Team up');
         await expect(expansionSetButton(page, 'Team Up', 'Sun & Moon', 2019)).toBeVisible();
@@ -978,11 +1049,12 @@ test.describe('Pokemon TCG Simulator', () => {
           await expect(rebelClashResult).toBeVisible();
           await rebelClashResult.click();
 
-          await expect(page.getByText('REBEL CLASH').last()).toBeVisible();
-          await expect(page.getByText("GALARIAN SIRFETCH'D").last()).toBeVisible();
-          await expect(page.getByText('RARITY')).toBeVisible();
-          await expect(page.getByText('Rare Holo')).toBeVisible();
-          await expect(page.getByText('Meteor Assault -')).toBeVisible();
+          const selectedCardDetail = page.getByLabel("Galarian Sirfetch'd");
+
+          await expect(selectedCardDetail.getByText('REBEL CLASH')).toBeVisible();
+          await expect(selectedCardDetail.getByText('RARITY')).toBeVisible();
+          await expect(selectedCardDetail.getByText('Rare Holo')).toBeVisible();
+          await expect(selectedCardDetail.getByText('Meteor Assault -')).toBeVisible();
         }
       );
     });
