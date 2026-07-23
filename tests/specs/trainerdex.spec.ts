@@ -54,7 +54,7 @@ test.describe('@live TrainerDex', () => {
   }
 
   function gameVersionButton(page: Page, versionName: string) {
-    return page.getByRole('complementary').getByRole('button', {
+    return page.getByRole('main').getByRole('button', {
       name: new RegExp(`^${versionName}$`, 'i')
     });
   }
@@ -253,22 +253,56 @@ test.describe('@live TrainerDex', () => {
       'Game version switch keeps the active Hoenn trainer usable',
       async ({ page }) => {
         await regionButton(page, 'Hoenn').click();
-        await expect(trainerDetailText(page, /^Omega Ruby Alpha Sapphire$/i)).toBeVisible();
+        await expect(
+          page
+            .getByRole('main')
+            .getByRole('paragraph')
+            .filter({ hasText: /^Omega Ruby Alpha Sapphire$/i })
+        ).toBeVisible();
 
         await gameVersionButton(page, 'EMERALD').click();
 
-        await expect(trainerDetailText(page, /^Emerald$/i)).toBeVisible();
+        await expect(
+          page
+            .getByRole('main')
+            .getByRole('paragraph')
+            .filter({ hasText: /^Emerald$/i })
+        ).toBeVisible();
         await expect(trainerDetailHeading(page, 'Roxanne')).toBeVisible();
         await expect(teamPokemonButton(page, 'Geodude')).toBeVisible();
         await expect(page.getByText('AVERAGE LEVEL')).toBeVisible();
 
         await gameVersionButton(page, 'RUBY SAPPHIRE').click();
 
-        await expect(trainerDetailText(page, /^Ruby Sapphire$/i)).toBeVisible();
+        await expect(
+          page
+            .getByRole('main')
+            .getByRole('paragraph')
+            .filter({ hasText: /^Ruby Sapphire$/i })
+        ).toBeVisible();
         await expect(trainerDetailHeading(page, 'Roxanne')).toBeVisible();
         await expect(teamPokemonButton(page, 'Nosepass')).toBeVisible();
       }
     );
+
+    // Verifies a recorded rematch stage refreshes the selected trainer's team and analysis.
+    trainerDexTest('Battle stage switch updates a trainer rematch team', async ({ page }) => {
+      await page
+        .getByRole('main')
+        .getByRole('button', { name: /^heartgold soulsilver$/i })
+        .click();
+
+      const battleStages = page.getByLabel('Pokemon team battle stage');
+      await expect(battleStages.getByRole('button', { name: /^initial team$/i })).toBeVisible();
+      await expect(
+        battleStages.getByRole('button', { name: /^fighting dojo rematch$/i })
+      ).toBeVisible();
+
+      await battleStages.getByRole('button', { name: /^fighting dojo rematch$/i }).click();
+      await expect(teamPokemonButton(page, 'Golem')).toBeVisible();
+      await expect(teamPokemonButton(page, 'Rampardos')).toBeVisible();
+      await expect(page.getByRole('region', { name: /trainer analysis/i })).toBeVisible();
+    });
 
     // Verifies search can intentionally find trainers outside the currently selected region.
     trainerDexTest(

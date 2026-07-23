@@ -459,13 +459,12 @@ test.describe('@live Pokemon Quiz', () => {
       'Reset while a question is unanswered returns to ready state',
       async ({ page }) => {
         await page.getByRole('button', { name: /^start quiz$/i }).click();
-        await answerButtons(page).first().click();
+        await expectPlayableQuestion(page);
         await expect(page.getByRole('button', { name: /^reset$/i })).toBeEnabled();
 
-        await expect(page.locator('.quiz-answer-button.is-success')).toHaveCount(1);
-        await expect(quizAnswerButtons(page)).toHaveCount(4);
-        for (let i = 0; i < 4; i += 1) {
-          await expect(quizAnswerButtons(page).nth(i)).toBeDisabled();
+        const answerCount = await quizAnswerButtons(page).count();
+        for (let i = 0; i < answerCount; i += 1) {
+          await expect(quizAnswerButtons(page).nth(i)).toBeEnabled();
         }
         await page.getByRole('button', { name: /^reset$/i }).click();
 

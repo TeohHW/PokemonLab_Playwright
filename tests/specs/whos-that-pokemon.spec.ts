@@ -76,9 +76,12 @@ test.describe("@live Who's That Pokemon", () => {
 
     return page.evaluate(async (id) => {
       const response = await fetch(`https://pokeapi.co/api/v2/pokemon/${id}`);
-      const pokemon = (await response.json()) as { name: string };
+      const pokemon = (await response.json()) as {
+        name: string;
+        species?: { name?: string };
+      };
 
-      return pokemon.name;
+      return pokemon.species?.name ?? pokemon.name;
     }, pokemonId);
   }
 
@@ -540,12 +543,14 @@ test.describe("@live Who's That Pokemon", () => {
         await page.getByPlaceholder('Pokemon name...').fill('!@#$%^&*()_+');
         await page.getByRole('button', { name: /^guess$/i }).click();
 
+        await expect(page.locator('form')).toContainText(
+          'Please enter a valid Pokemon name or National Dex number.'
+        );
         await expect(
-          page.getByText(/It was .+\. Click the Pokemon to learn more\./i)
+          page.getByRole('button', { name: /mystery pokemon silhouette/i })
         ).toBeVisible();
-        await expect(page.getByText('Score')).toBeVisible();
-        await expect(page.getByText('Rounds')).toBeVisible();
-        await expect(page.getByText('NEXT POKEMON')).toBeVisible();
+        await expectScoreAndRounds(page, 0, 0);
+        await expect(page.getByRole('button', { name: /^guess$/i })).toBeVisible();
       }
     );
   });

@@ -396,6 +396,58 @@ test.describe('@live Pokemon Pokedex', () => {
         }
       }
     );
+
+    // Verifies the Pokedex's interactive ability and move references expose their loaded details.
+    pokedexTest('Ability and move references open accessible detail dialogs', async ({ page }) => {
+      await pokemonListButton(page, 1, 'Bulbasaur').click();
+
+      await pokemonDetailCard(page)
+        .getByRole('button', { name: /^overgrow$/i })
+        .click();
+      const abilityDialog = page.getByRole('dialog', { name: /^overgrow$/i });
+
+      await expect(abilityDialog.getByRole('heading', { name: /^effect$/i })).toBeVisible();
+      await expect(
+        abilityDialog.getByRole('heading', { name: /^game description$/i })
+      ).toBeVisible();
+      await abilityDialog.getByRole('button', { name: /^close pokedex detail$/i }).click();
+
+      await pokemonDetailCard(page)
+        .getByRole('button', { name: /tackle normal physical 40 100/i })
+        .click();
+      const moveDialog = page.getByRole('dialog', { name: /^tackle$/i });
+
+      await expect(moveDialog).toBeVisible();
+      await expect(moveDialog.getByText(/physical/i).first()).toBeVisible();
+      await moveDialog.getByRole('button', { name: /^close pokedex detail$/i }).click();
+      await expect(moveDialog).toBeHidden();
+    });
+
+    // Verifies evolution nodes navigate to the selected species profile.
+    pokedexTest('Evolution tree navigation opens the selected evolution', async ({ page }) => {
+      await pokemonListButton(page, 1, 'Bulbasaur').click();
+      await pokemonDetailCard(page)
+        .getByRole('button', { name: /ivysaur.*level 16/i })
+        .click();
+
+      await expect(
+        pokemonDetailCard(page).getByRole('heading', { name: /^ivysaur$/i })
+      ).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Play Ivysaur cry' })).toBeVisible();
+      await expect(page.getByText('#002').last()).toBeVisible();
+    });
+
+    // Verifies a generation sprite set opens the available front/back variants.
+    pokedexTest('Generation sprite set opens its available variants', async ({ page }) => {
+      await pokemonListButton(page, 1, 'Bulbasaur').click();
+      await page.getByRole('button', { name: /bulbasaur red blue sprite/i }).click();
+
+      const spriteDialog = page.getByRole('dialog', { name: /^red blue sprites$/i });
+      await expect(spriteDialog.getByRole('img', { name: /^red blue front$/i })).toBeVisible();
+      await expect(spriteDialog.getByRole('img', { name: /^red blue back$/i })).toBeVisible();
+      await spriteDialog.getByRole('button', { name: /^close sprite details$/i }).click();
+      await expect(spriteDialog).toBeHidden();
+    });
   });
   test.describe('Game Pokedex / Region Filters', () => {
     // Verifies selecting a game Pokedex restricts the visible list to that game range.
