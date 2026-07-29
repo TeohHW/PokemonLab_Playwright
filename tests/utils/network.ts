@@ -1,6 +1,15 @@
-import type { Page } from '@playwright/test';
+import type { APIResponse, Page } from '@playwright/test';
 
 const pagesWithPokeApiRetries = new WeakSet<Page>();
+
+function isRouteLifecycleError(page: Page, error: unknown): boolean {
+  return (
+    page.isClosed() ||
+    /route is already handled|target page.*closed|browser has been closed|request context disposed|test ended/i.test(
+      String(error)
+    )
+  );
+}
 
 // Retries transient PokeAPI failures while preserving non-transient responses for the app to handle.
 export async function installPokeApiRetries(page: Page): Promise<void> {
@@ -14,20 +23,37 @@ export async function installPokeApiRetries(page: Page): Promise<void> {
     const maxAttempts = 3;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      try {
-        const response = await route.fetch({ timeout: 10_000 });
-        const isTransientResponse = response.status() === 429 || response.status() >= 500;
+      let response: APIResponse;
 
-        if (!isTransientResponse || attempt === maxAttempts) {
-          await route.fulfill({ response });
+      try {
+        response = await route.fetch({ timeout: 10_000 });
+      } catch (error) {
+        if (isRouteLifecycleError(page, error)) {
           return;
         }
-      } catch {
+
         if (attempt === maxAttempts) {
-          await route.continue();
-          return;
+          throw error;
+        }
+
+        continue;
+      }
+
+      const isTransientResponse = response.status() === 429 || response.status() >= 500;
+
+      if (isTransientResponse && attempt < maxAttempts) {
+        continue;
+      }
+
+      try {
+        await route.fulfill({ response });
+      } catch (error) {
+        if (!isRouteLifecycleError(page, error)) {
+          throw error;
         }
       }
+
+      return;
     }
   });
 }

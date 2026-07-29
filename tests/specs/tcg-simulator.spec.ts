@@ -2,6 +2,8 @@ import type { Locator, Page } from '@playwright/test';
 import { test, expect } from '../fixtures/test';
 
 test.describe('Pokemon TCG Simulator', () => {
+  test.describe.configure({ timeout: 60_000 });
+
   test.skip(
     ({ browserName }) => process.env.CI === 'true' && browserName === 'webkit',
     'TCG simulator is flaky on CI WebKit; covered by Chromium, Firefox, and local WebKit runs.'
@@ -93,6 +95,43 @@ test.describe('Pokemon TCG Simulator', () => {
     expect(progressMatch, `${setName} collection progress should be visible`).not.toBeNull();
 
     return Number(progressMatch?.[1]);
+  }
+
+  // Waits for React's collection state to be committed to localStorage before reload or page close.
+  async function expectStoredBinder(
+    page: Page,
+    setId: string,
+    expectedUniqueCards: number,
+    expectedOwnedCopies?: number
+  ) {
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            ({ collectionKey, selectedSetId }) => {
+              const storedCollection = JSON.parse(
+                localStorage.getItem(collectionKey) ?? '{}'
+              ) as Record<string, { setId?: string; count?: number }>;
+              const setCards = Object.values(storedCollection).filter(
+                (card) => card.setId === selectedSetId
+              );
+
+              return {
+                uniqueCards: setCards.length,
+                ownedCopies: setCards.reduce((total, card) => total + (card.count ?? 0), 0)
+              };
+            },
+            {
+              collectionKey: 'pokemon-pack-simulator-collection',
+              selectedSetId: setId
+            }
+          ),
+        { timeout: 30_000 }
+      )
+      .toEqual({
+        uniqueCards: expectedUniqueCards,
+        ownedCopies: expectedOwnedCopies ?? expectedUniqueCards
+      });
   }
 
   // Resets the active set binder only when existing localStorage progress is present.
@@ -642,6 +681,8 @@ test.describe('Pokemon TCG Simulator', () => {
 
         await expect(clearAllBindersDialog).toBeHidden();
         expect(await getCollectionProgress(page, 'Base', 102)).toBe(1);
+        await expectStoredBinder(page, 'base1', 1);
+        await expectStoredBinder(page, 'base3', 1);
 
         await page.getByRole('button', { name: 'Fossil logo Fossil Base' }).click();
         expect(await getCollectionProgress(page, 'Fossil', 62)).toBe(1);
@@ -656,6 +697,7 @@ test.describe('Pokemon TCG Simulator', () => {
 
           const baseProgress = await getCollectionProgress(page, 'Base', 102);
           expect(baseProgress).toBeGreaterThan(0);
+          await expectStoredBinder(page, 'base1', baseProgress, 10);
 
           await page.close();
           // A new page in the same browser context should still see the persisted localStorage collection.
@@ -673,6 +715,7 @@ test.describe('Pokemon TCG Simulator', () => {
 
         await clearSelectedBinderIfNeeded(page, 'Base', 102);
         expect(await getCollectionProgress(page, 'Base', 102)).toBe(0);
+        await expectStoredBinder(page, 'base1', 0);
 
         await page.reload();
         await enterTcgSimulator(page);
@@ -690,7 +733,10 @@ test.describe('Pokemon TCG Simulator', () => {
           await enterTcgSimulator(page);
 
           expect(await getCollectionProgress(page, 'Base', 102)).toBe(1);
-          await expect(binderCardButton(page, 'Abra')).toContainText(/Common\s*·\s*Owned x 2/i);
+          await expectStoredBinder(page, 'base1', 1, 2);
+          await expect(binderCardButton(page, 'Abra')).toContainText(/Common\s*·\s*Owned x 2/i, {
+            timeout: 30_000
+          });
         }
       );
 

@@ -341,7 +341,12 @@ test.describe('@live Pokemon Team Planner', () => {
     teamPlannerTest('Supports the Legends Z-A Pokedex profile', async ({ page }) => {
       await gamePokedexSelect(page).selectOption({ label: 'Legends: Z-A' });
       await expect(gamePokedexSelect(page).locator('option:checked')).toHaveText('Legends: Z-A');
+      await expect(page.getByLabel('Team Pokemon pages')).toContainText('Page 1 / 16', {
+        timeout: 30_000
+      });
       await expect(pokemonListButtons(page)).toHaveCount(24);
+      await expect(pokemonListButton(page, 13, 'Weedle')).toBeVisible();
+      await expect(pokemonListButton(page, 41, 'Zubat')).toBeVisible();
       await expect(page.getByText(/available in Legends: Z-A/i)).toBeVisible();
     });
   });
