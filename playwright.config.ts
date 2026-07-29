@@ -10,7 +10,6 @@ const showAllTests = process.env.PW_SHOW_ALL_TESTS === 'true';
 
 export default defineConfig({
   testDir: './tests',
-  testIgnore: ['**/examples/**'],
   timeout: 30_000,
   expect: {
     timeout: 7_500
