@@ -1,17 +1,25 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/test';
+import { installPokeApiRetries } from '../utils/network';
 
 test.describe('@live Pokemon Team Planner', () => {
+  test.describe.configure({ timeout: 60_000 });
+
   const teamPlannerStorageKey = 'pokemon-team-planner-saved-team';
 
   async function openTeamPlanner(page: Page) {
+    await installPokeApiRetries(page);
     await page.goto('/');
     await page.evaluate((storageKey) => localStorage.removeItem(storageKey), teamPlannerStorageKey);
     await page.getByRole('button', { name: /pokemon team planner/i }).click();
 
     await expect(page.getByRole('heading', { name: /pokemon team planner/i })).toBeVisible();
     await expect(page.getByRole('combobox', { name: /game pokedex/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /^fill randomly$/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^fill from meta$/i })).toBeEnabled({
+      timeout: 30_000
+    });
+    await expect(page.getByRole('button', { name: /^fill randomly$/i })).toBeEnabled();
+    await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
   }
 
   const teamPlannerTest = test.extend<{ openTeamPlannerStation: void }>({

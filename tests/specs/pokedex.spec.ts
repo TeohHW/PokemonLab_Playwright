@@ -1,19 +1,50 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/test';
+import { installPokeApiRetries } from '../utils/network';
 
 test.describe('@live Pokemon Pokedex', () => {
+  test.describe.configure({ timeout: 60_000 });
+
   function escapeRegExp(value: string) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   // Opens the Pokedex station from the home screen and waits for the list controls.
   async function openPokedex(page: Page) {
-    await page.goto('/');
-    await page.getByRole('button', { name: /search pokemon by name or number/i }).click();
+    await installPokeApiRetries(page);
 
-    await expect(page.getByPlaceholder('Name or number...')).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole('button', { name: /^search$/i })).toBeEnabled();
-    await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible({ timeout: 30_000 });
+    const firstPokemon = pokemonListButton(page, 1, 'Bulbasaur');
+    const loadError = page.getByText('Unable to load this Pokedex.');
+
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      await page.goto('/');
+      await page.getByRole('button', { name: /search pokemon by name or number/i }).click();
+
+      await expect(page.getByPlaceholder('Name or number...')).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByRole('button', { name: /^search$/i })).toBeEnabled();
+      await expect
+        .poll(
+          async () => {
+            if (await firstPokemon.isVisible()) {
+              return 'ready';
+            }
+
+            return (await loadError.isVisible()) ? 'failed' : 'loading';
+          },
+          { timeout: 30_000 }
+        )
+        .not.toBe('loading');
+
+      if (await firstPokemon.isVisible()) {
+        return;
+      }
+
+      if (attempt < 2) {
+        await page.waitForTimeout(500);
+      }
+    }
+
+    await expect(firstPokemon).toBeVisible({ timeout: 1_000 });
   }
 
   const pokedexTest = test.extend<{ openPokedexStation: void }>({
