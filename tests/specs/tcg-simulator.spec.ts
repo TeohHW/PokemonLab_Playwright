@@ -337,6 +337,33 @@ test.describe('Pokemon TCG Simulator', () => {
         expect(await getCollectionProgress(page, 'Base', 102)).toBe(0);
         await expect(page.getByRole('heading', { name: /^binder$/i })).toBeVisible();
       });
+
+      // Verifies the scenario: Adapts set browsing and controls across web and mobile viewports.
+      tcgTest(
+        'Adapts set browsing and controls across web and mobile viewports',
+        async ({ page }) => {
+          await page.setViewportSize({ width: 1024, height: 900 });
+
+          await expect(page.locator('.tcg-page')).toBeVisible();
+          await expect(page.locator('.series-filter')).toHaveCSS('flex-wrap', 'nowrap');
+          await expect(page.locator('.series-filter')).toHaveCSS('overflow-x', 'auto');
+
+          await page.setViewportSize({ width: 390, height: 844 });
+
+          await expect(openOnePackButton(page)).toBeVisible();
+          await expect(page.locator('.set-grid')).toHaveCSS('grid-auto-flow', 'column');
+          await expect(page.locator('.set-grid')).toHaveCSS('overflow-x', 'auto');
+          await expect(page.locator('.control-panel .button-group')).toHaveCSS(
+            'grid-template-columns',
+            /\d+(?:\.\d+)?px \d+(?:\.\d+)?px/
+          );
+          expect(
+            await page.evaluate(
+              () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
+            )
+          ).toBeTruthy();
+        }
+      );
     });
 
     test.describe('Pack opening', () => {

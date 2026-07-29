@@ -256,6 +256,37 @@ test.describe('@live Pokemon Pokedex', () => {
         ).toBeVisible();
       }
     );
+
+    // Verifies the scenario: Adapts Pokedex browsing across web and mobile viewports.
+    test('Adapts Pokedex browsing across web and mobile viewports', async ({ page }) => {
+      await page.setViewportSize({ width: 1024, height: 900 });
+      await openPokedex(page);
+
+      await expect(page.locator('.pokedex-layout')).toHaveCSS(
+        'grid-template-columns',
+        /\d+(?:\.\d+)?px \d+(?:\.\d+)?px/
+      );
+
+      await page.setViewportSize({ width: 390, height: 844 });
+
+      await expect(page.getByPlaceholder('Name or number...')).toBeVisible();
+      await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
+      await expect(page.locator('.pokedex-layout')).toHaveCSS(
+        'grid-template-columns',
+        /^\d+(?:\.\d+)?px$/
+      );
+      await expect(page.locator('.pokedex-game-grid')).toHaveCSS('grid-auto-flow', 'column');
+      await expect(page.locator('.pokedex-game-grid')).toHaveCSS('overflow-x', 'auto');
+      await expect(page.locator('.pokemon-list')).toHaveCSS(
+        'grid-template-columns',
+        /\d+(?:\.\d+)?px \d+(?:\.\d+)?px/
+      );
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
+        )
+      ).toBeTruthy();
+    });
   });
 
   test.describe('Search', () => {

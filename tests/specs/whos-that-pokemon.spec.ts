@@ -167,18 +167,36 @@ test.describe("@live Who's That Pokemon", () => {
       }
     );
 
-    // Verifies setup controls remain available when the station is opened on a mobile viewport.
-    test('Setup controls remain visible on mobile viewport', async ({ page }) => {
-      await page.setViewportSize({ width: 390, height: 844 });
+    // Verifies setup keeps its web columns and compact mobile challenge scroller.
+    test('Adapts setup across web and mobile viewports', async ({ page }) => {
+      await page.setViewportSize({ width: 1024, height: 900 });
       await page.goto('/');
       await clearWhosThatPokemonLeaderboard(page);
       await openWhosThatPokemon(page);
+
+      await expect(page.locator('.who-setup-layout')).toHaveCSS(
+        'grid-template-columns',
+        /\d+(?:\.\d+)?px \d+(?:\.\d+)?px/
+      );
+
+      await page.setViewportSize({ width: 390, height: 844 });
 
       await expect(page.getByText('TRAINER SETUP')).toBeVisible();
       await expect(page.getByRole('textbox')).toBeVisible();
       await expect(page.getByRole('button', { name: /^start game$/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /^random region/i })).toBeVisible();
       await expect(page.getByText('LEADERBOARD')).toBeVisible();
+      await expect(page.locator('.who-setup-layout')).toHaveCSS(
+        'grid-template-columns',
+        /^\d+(?:\.\d+)?px$/
+      );
+      await expect(page.locator('.who-region-grid')).toHaveCSS('grid-auto-flow', 'column');
+      await expect(page.locator('.who-region-grid')).toHaveCSS('overflow-x', 'auto');
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
+        )
+      ).toBeTruthy();
     });
   });
 
@@ -215,6 +233,7 @@ test.describe("@live Who's That Pokemon", () => {
         await expect(page.getByText(/^\s+Ash\s+$/)).toHaveCount(0);
       }
     );
+    // Verifies the scenario: Very long trainer name is handled without breaking layout.
     whosThatPokemonLeaderboardTest(
       'Very long trainer name is handled without breaking layout',
       async ({ page }) => {
@@ -239,6 +258,7 @@ test.describe("@live Who's That Pokemon", () => {
         await expect(page.getByText(longTrainerName, { exact: true })).toHaveCount(0);
       }
     );
+    // Verifies the scenario: Special-character trainer name is either accepted or validated consistently.
     whosThatPokemonLeaderboardTest(
       'Special-character trainer name is either accepted or validated consistently',
       async ({ page }) => {
@@ -372,6 +392,7 @@ test.describe("@live Who's That Pokemon", () => {
       await expect(page.getByRole('button', { name: /^guess$/i })).toBeVisible();
     });
 
+    // Verifies the scenario: Next Pokemon starts a fresh unresolved round.
     whosThatPokemonTest('Next Pokemon starts a fresh unresolved round', async ({ page }) => {
       await startGame(page);
       await expect(page.getByText('Score')).toBeVisible();
@@ -390,6 +411,7 @@ test.describe("@live Who's That Pokemon", () => {
 
       await expect(page.getByLabel('Current score')).toContainText('1');
     });
+    // Verifies the scenario: Score and rounds persist correctly across multiple rounds.
     whosThatPokemonTest(
       'Score and rounds persist correctly across multiple rounds',
       async ({ page }) => {
@@ -429,6 +451,7 @@ test.describe("@live Who's That Pokemon", () => {
         await expectScoreAndRounds(page, 2, 3);
       }
     );
+    // Verifies the scenario: Pokemon silhouette becomes inspectable after reveal.
     whosThatPokemonTest('Pokemon silhouette becomes inspectable after reveal', async ({ page }) => {
       await startGame(page);
 
@@ -487,6 +510,7 @@ test.describe("@live Who's That Pokemon", () => {
       }
     );
 
+    // Verifies the scenario: Correct guess increases score and advances the round.
     whosThatPokemonTest(
       'Correct guess increases score and advances the round',
       async ({ page }) => {
@@ -507,6 +531,7 @@ test.describe("@live Who's That Pokemon", () => {
         await expect(page.getByRole('button', { name: /^guess$/i })).toBeHidden();
       }
     );
+    // Verifies the scenario: Guessing is case-insensitive and trims extra spaces.
     whosThatPokemonTest('Guessing is case-insensitive and trims extra spaces', async ({ page }) => {
       await startGame(page);
 
@@ -519,6 +544,7 @@ test.describe("@live Who's That Pokemon", () => {
 
       await expectScoreAndRounds(page, 1, 1);
     });
+    // Verifies the scenario: Empty guess shows validation without revealing the Pokemon.
     whosThatPokemonTest(
       'Empty guess shows validation without revealing the Pokemon',
       async ({ page }) => {
@@ -535,6 +561,7 @@ test.describe("@live Who's That Pokemon", () => {
         await expectScoreAndRounds(page, 0, 0);
       }
     );
+    // Verifies the scenario: Special-character guess fails safely without breaking the round.
     whosThatPokemonTest(
       'Special-character guess fails safely without breaking the round',
       async ({ page }) => {
@@ -568,6 +595,7 @@ test.describe("@live Who's That Pokemon", () => {
       expect((await helpChoiceLabels(page)).length).toBeGreaterThan(0);
     });
 
+    // Verifies the scenario: Selecting a help choice submits or fills the guess consistently.
     whosThatPokemonTest(
       'Selecting a help choice submits or fills the guess consistently',
       async ({ page }) => {
@@ -588,6 +616,7 @@ test.describe("@live Who's That Pokemon", () => {
         }
       }
     );
+    // Verifies the scenario: Help shows valid selectable choices.
     whosThatPokemonTest('Help shows valid selectable choices', async ({ page }) => {
       await startGame(page);
       await page.getByRole('button', { name: /^help$/i }).click();
@@ -610,6 +639,7 @@ test.describe("@live Who's That Pokemon", () => {
       await expect(page.getByText('No scores yet.')).toBeVisible();
     });
 
+    // Verifies the scenario: Leaderboard updates score after each successful guess.
     whosThatPokemonLeaderboardTest(
       'Leaderboard updates score after each successful guess',
       async ({ page }) => {
@@ -629,6 +659,7 @@ test.describe("@live Who's That Pokemon", () => {
       }
     );
 
+    // Verifies the scenario: Leaderboard orders higher scores before lower scores.
     whosThatPokemonLeaderboardTest(
       'Leaderboard orders higher scores before lower scores',
       async ({ page }) => {
@@ -668,6 +699,7 @@ test.describe("@live Who's That Pokemon", () => {
       }
     );
 
+    // Verifies the scenario: Leaderboard updates after reset while a game is still active.
     whosThatPokemonLeaderboardTest(
       'Leaderboard updates after reset while a game is still active',
       async ({ page }) => {
@@ -700,6 +732,7 @@ test.describe("@live Who's That Pokemon", () => {
       }
     );
 
+    // Verifies the scenario: Reset clears leaderboard scores.
     whosThatPokemonLeaderboardTest('Reset clears leaderboard scores', async ({ page }) => {
       const trainerName = uniqueTrainerName('TC');
       await startGame(page, trainerName);

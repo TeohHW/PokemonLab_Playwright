@@ -116,15 +116,34 @@ test.describe('@live TrainerDex', () => {
       await expect(page.getByRole('button', { name: /pokemon team planner/i })).toBeVisible();
     });
 
-    // Verifies the core controls remain usable on a narrow mobile viewport.
-    test('Initial TrainerDex controls remain usable on mobile viewport', async ({ page }) => {
-      await page.setViewportSize({ width: 390, height: 844 });
+    // Verifies TrainerDex keeps two web panels and compact mobile scrollers.
+    test('Adapts TrainerDex across web and mobile viewports', async ({ page }) => {
+      await page.setViewportSize({ width: 1024, height: 900 });
       await openTrainerDex(page);
+
+      await expect(page.locator('.trainerdex-layout')).toHaveCSS(
+        'grid-template-columns',
+        /\d+(?:\.\d+)?px \d+(?:\.\d+)?px/
+      );
+
+      await page.setViewportSize({ width: 390, height: 844 });
 
       await expect(searchInput(page)).toBeVisible();
       await expect(regionButton(page, 'Kanto')).toBeVisible();
       await expect(trainerButton(page, 'Brock')).toBeVisible();
       await expect(trainerDetailHeading(page, 'Brock')).toBeVisible();
+      await expect(page.locator('.trainerdex-layout')).toHaveCSS(
+        'grid-template-columns',
+        /^\d+(?:\.\d+)?px$/
+      );
+      await expect(page.locator('.trainerdex-region-grid')).toHaveCSS('grid-auto-flow', 'column');
+      await expect(page.locator('.trainerdex-region-grid')).toHaveCSS('overflow-x', 'auto');
+      await expect(page.locator('.trainerdex-hero')).toHaveCSS('display', 'flex');
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
+        )
+      ).toBeTruthy();
     });
   });
 

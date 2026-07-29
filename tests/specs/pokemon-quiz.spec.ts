@@ -181,10 +181,17 @@ test.describe('@live Pokemon Quiz', () => {
       releasePokemonRequests();
     });
 
-    // Verifies the initial quiz controls remain reachable on a narrow mobile viewport.
-    test('Initial controls remain visible on mobile viewport', async ({ page }) => {
-      await page.setViewportSize({ width: 390, height: 844 });
+    // Verifies the quiz uses the intended two-panel web and compact mobile layouts.
+    test('Adapts initial controls across web and mobile viewports', async ({ page }) => {
+      await page.setViewportSize({ width: 1024, height: 900 });
       await openPokemonQuiz(page);
+
+      await expect(page.locator('.quiz-layout')).toHaveCSS(
+        'grid-template-columns',
+        /\d+(?:\.\d+)?px \d+(?:\.\d+)?px/
+      );
+
+      await page.setViewportSize({ width: 390, height: 844 });
 
       await expect(quizPoolSelect(page)).toBeVisible();
       await expect(quizCategorySelect(page)).toBeVisible();
@@ -194,6 +201,19 @@ test.describe('@live Pokemon Quiz', () => {
       await expect(page.getByText('Rounds')).toBeVisible();
       await expect(page.getByText('Streak')).toBeVisible();
       await expect(page.getByText('READY CHECK')).toBeVisible();
+      await expect(page.locator('.quiz-layout')).toHaveCSS(
+        'grid-template-columns',
+        /^\d+(?:\.\d+)?px$/
+      );
+      await expect(page.locator('.quiz-score-card')).toHaveCSS(
+        'grid-template-columns',
+        /\d+(?:\.\d+)?px \d+(?:\.\d+)?px \d+(?:\.\d+)?px/
+      );
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
+        )
+      ).toBeTruthy();
     });
   });
 

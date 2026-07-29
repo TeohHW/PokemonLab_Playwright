@@ -2,8 +2,11 @@ import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/test';
 
 test.describe('@live Pokemon Team Planner', () => {
+  const teamPlannerStorageKey = 'pokemon-team-planner-saved-team';
+
   async function openTeamPlanner(page: Page) {
     await page.goto('/');
+    await page.evaluate((storageKey) => localStorage.removeItem(storageKey), teamPlannerStorageKey);
     await page.getByRole('button', { name: /pokemon team planner/i }).click();
 
     await expect(page.getByRole('heading', { name: /pokemon team planner/i })).toBeVisible();
@@ -16,6 +19,12 @@ test.describe('@live Pokemon Team Planner', () => {
       async ({ page }, use) => {
         await openTeamPlanner(page);
         await use();
+
+        if (!page.isClosed()) {
+          await page
+            .evaluate((storageKey) => localStorage.removeItem(storageKey), teamPlannerStorageKey)
+            .catch(() => {});
+        }
       },
       { auto: true }
     ]
@@ -114,12 +123,15 @@ test.describe('@live Pokemon Team Planner', () => {
   }
 
   test.describe('Station / Initial Load', () => {
+    // Verifies the scenario: Starts with the complete planning workspace.
     teamPlannerTest('Starts with the complete planning workspace', async ({ page }) => {
       await expect(gamePokedexSelect(page)).toHaveValue('all');
       await expect(battleFormatSelect(page)).toHaveValue('open');
       await expect(sortPokemonSelect(page)).toHaveValue('entry');
       await expect(page.getByRole('searchbox', { name: 'Pokemon' })).toBeVisible();
       await expect(page.getByText('0/6 selected')).toBeVisible();
+      await expect(page.getByRole('button', { name: /^save team$/i })).toBeDisabled();
+      await expect(page.getByText(/save this team to restore it after reload/i)).toBeVisible();
       await expect(page.getByRole('button', { name: /^fill from meta$/i })).toBeEnabled();
       await expect(page.getByRole('button', { name: /^fill randomly$/i })).toBeEnabled();
       await expect(page.getByRole('button', { name: /^remove all$/i })).toBeDisabled();
@@ -132,6 +144,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(teamSlots(page).getByRole('article')).toHaveCount(6);
     });
 
+    // Verifies the scenario: Starts the assistant and analysis in an empty state.
     teamPlannerTest('Starts the assistant and analysis in an empty state', async ({ page }) => {
       await expect(page.getByRole('heading', { name: /^team-building assistant$/i })).toBeVisible();
       await expect(page.getByLabel('Team guidance score 0 out of 100')).toBeVisible();
@@ -145,6 +158,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(page.getByRole('heading', { name: /^coverage gaps$/i })).toBeVisible();
     });
 
+    // Verifies the scenario: Navigates paged Pokemon results in both directions.
     teamPlannerTest('Navigates paged Pokemon results in both directions', async ({ page }) => {
       const pager = page.getByLabel('Team Pokemon pages');
       const previousButton = pager.getByRole('button', { name: /^prev$/i });
@@ -163,6 +177,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
     });
 
+    // Verifies the scenario: Shows a stable shell while Pokemon data is delayed.
     test('Shows a stable shell while Pokemon data is delayed', async ({ page }) => {
       let releaseRequests!: () => void;
       const canContinue = new Promise<void>((resolve) => {
@@ -189,31 +204,63 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible({ timeout: 30_000 });
     });
 
-    test('Keeps primary controls usable on a mobile viewport', async ({ page }) => {
-      await page.setViewportSize({ width: 390, height: 844 });
+    // Verifies the scenario: Adapts the planner workspace across web and mobile viewports.
+    test('Adapts the planner workspace across web and mobile viewports', async ({ page }) => {
+      await page.setViewportSize({ width: 1024, height: 900 });
       await openTeamPlanner(page);
+
+      await expect(page.locator('.team-planner-layout')).toHaveCSS(
+        'grid-template-columns',
+        /\d+(?:\.\d+)?px \d+(?:\.\d+)?px/
+      );
+
+      await page.setViewportSize({ width: 390, height: 844 });
 
       await expect(page.getByRole('searchbox', { name: 'Pokemon' })).toBeVisible();
       await expect(gamePokedexSelect(page)).toBeVisible();
       await expect(battleFormatSelect(page)).toBeVisible();
       await expect(page.getByRole('button', { name: /^fill randomly$/i })).toBeEnabled();
       await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible();
+      await expect(page.locator('.team-planner-layout')).toHaveCSS(
+        'grid-template-columns',
+        /^\d+(?:\.\d+)?px$/
+      );
+      await expect(page.locator('.team-pokemon-list')).toHaveCSS(
+        'grid-template-columns',
+        /\d+(?:\.\d+)?px \d+(?:\.\d+)?px/
+      );
+      await expect(page.locator('.team-slot-grid')).toHaveCSS(
+        'grid-template-columns',
+        /\d+(?:\.\d+)?px \d+(?:\.\d+)?px \d+(?:\.\d+)?px/
+      );
+      await expect(page.locator('.team-save-row')).toHaveCSS(
+        'grid-template-columns',
+        /^\d+(?:\.\d+)?px$/
+      );
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
+        )
+      ).toBeTruthy();
     });
   });
 
   test.describe('Filtering / Sorting / Pokedex', () => {
+    // Verifies the scenario: Searches by Pokemon name case-insensitively.
     teamPlannerTest('Searches by Pokemon name case-insensitively', async ({ page }) => {
       await page.getByRole('searchbox', { name: 'Pokemon' }).fill('pIkAcHu');
       await expect(pokemonListButton(page, 25, 'Pikachu')).toBeVisible();
       await expect(pokemonListButtons(page)).toHaveCount(1);
     });
 
+    // Verifies the scenario: Searches by Pokedex number.
     teamPlannerTest('Searches by Pokedex number', async ({ page }) => {
       await page.getByRole('searchbox', { name: 'Pokemon' }).fill('25');
       await expect(pokemonListButton(page, 25, 'Pikachu')).toBeVisible();
       await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeHidden();
     });
 
+    // Verifies the scenario: Invalid search reaches a safe empty state.
     teamPlannerTest('Invalid search reaches a safe empty state', async ({ page }) => {
       await page.getByRole('searchbox', { name: 'Pokemon' }).fill('not-a-real-pokemon');
       await expect(pokemonListButtons(page)).toHaveCount(0);
@@ -223,6 +270,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(page.getByText('0/6 selected')).toBeVisible();
     });
 
+    // Verifies the scenario: Clearing search restores the first result page.
     teamPlannerTest('Clearing search restores the first result page', async ({ page }) => {
       const search = page.getByRole('searchbox', { name: 'Pokemon' });
       await search.fill('Pikachu');
@@ -232,6 +280,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(page.getByLabel('Team Pokemon pages')).toContainText('Page 1 / 43');
     });
 
+    // Verifies the scenario: Sorts the visible Pokemon alphabetically.
     teamPlannerTest('Sorts the visible Pokemon alphabetically', async ({ page }) => {
       await sortPokemonSelect(page).selectOption({ label: 'Name' });
       await expect(sortPokemonSelect(page)).toHaveValue('name');
@@ -239,6 +288,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect.poll(() => visiblePokemonNames(page)).toEqual(expected);
     });
 
+    // Verifies the scenario: Exposes type, legendary, and base-stat sorting choices.
     teamPlannerTest('Exposes type, legendary, and base-stat sorting choices', async ({ page }) => {
       const labels = await sortPokemonSelect(page).locator('option').allTextContents();
       expect(labels).toEqual(
@@ -255,6 +305,7 @@ test.describe('@live Pokemon Team Planner', () => {
       );
     });
 
+    // Verifies the scenario: Scopes browsing and search to the selected game Pokedex.
     teamPlannerTest('Scopes browsing and search to the selected game Pokedex', async ({ page }) => {
       await gamePokedexSelect(page).selectOption({ label: 'Ruby / Sapphire / Emerald' });
       await expect(pokemonListButton(page, 1, 'Treecko')).toBeVisible();
@@ -268,6 +319,7 @@ test.describe('@live Pokemon Team Planner', () => {
       );
     });
 
+    // Verifies the scenario: Changing game Pokedex preserves an in-progress team.
     teamPlannerTest('Changing game Pokedex preserves an in-progress team', async ({ page }) => {
       await addPokemon(page, 1, 'Bulbasaur');
       await gamePokedexSelect(page).selectOption({ label: 'Ruby / Sapphire / Emerald' });
@@ -277,6 +329,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(pokemonListButton(page, 1, 'Treecko')).toBeVisible();
     });
 
+    // Verifies the scenario: Supports the Legends Z-A Pokedex profile.
     teamPlannerTest('Supports the Legends Z-A Pokedex profile', async ({ page }) => {
       await gamePokedexSelect(page).selectOption({ label: 'Legends: Z-A' });
       await expect(gamePokedexSelect(page).locator('option:checked')).toHaveText('Legends: Z-A');
@@ -286,6 +339,7 @@ test.describe('@live Pokemon Team Planner', () => {
   });
 
   test.describe('Manual and Automatic Team Building', () => {
+    // Verifies the scenario: Adds and removes a Pokemon while recomputing the workspace.
     teamPlannerTest(
       'Adds and removes a Pokemon while recomputing the workspace',
       async ({ page }) => {
@@ -303,6 +357,7 @@ test.describe('@live Pokemon Team Planner', () => {
       }
     );
 
+    // Verifies the scenario: Caps manual selection at six Pokemon.
     teamPlannerTest('Caps manual selection at six Pokemon', async ({ page }) => {
       for (const pokemon of [
         [1, 'Bulbasaur'],
@@ -320,6 +375,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(pokemonListButton(page, 7, 'Squirtle')).toBeDisabled();
     });
 
+    // Verifies the scenario: Remove All restores every empty slot.
     teamPlannerTest('Remove All restores every empty slot', async ({ page }) => {
       await addPokemon(page, 1, 'Bulbasaur');
       await addPokemon(page, 4, 'Charmander');
@@ -331,6 +387,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(page.getByRole('button', { name: /^remove all$/i })).toBeDisabled();
     });
 
+    // Verifies the scenario: Open Planning asks before adding a duplicate species.
     teamPlannerTest('Open Planning asks before adding a duplicate species', async ({ page }) => {
       await addPokemon(page, 1, 'Bulbasaur');
       await pokemonListButton(page, 1, 'Bulbasaur').click();
@@ -344,6 +401,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(page.getByText('1/6 selected')).toBeVisible();
     });
 
+    // Verifies the scenario: Can explicitly allow a duplicate in Open Planning.
     teamPlannerTest('Can explicitly allow a duplicate in Open Planning', async ({ page }) => {
       await addPokemon(page, 1, 'Bulbasaur');
       await pokemonListButton(page, 1, 'Bulbasaur').click();
@@ -356,6 +414,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(page.getByRole('button', { name: /^remove bulbasaur$/i })).toHaveCount(2);
     });
 
+    // Verifies the scenario: Fill Randomly preserves a manual pick and fills remaining slots.
     teamPlannerTest(
       'Fill Randomly preserves a manual pick and fills remaining slots',
       async ({ page }) => {
@@ -368,6 +427,7 @@ test.describe('@live Pokemon Team Planner', () => {
       }
     );
 
+    // Verifies the scenario: Fill from Meta preserves a manual pick and fills legal candidates.
     teamPlannerTest(
       'Fill from Meta preserves a manual pick and fills legal candidates',
       async ({ page }) => {
@@ -383,17 +443,19 @@ test.describe('@live Pokemon Team Planner', () => {
   });
 
   test.describe('Battle Formats and Legality', () => {
+    // Verifies the scenario: Shows format-specific guidance and a legal status.
     teamPlannerTest('Shows format-specific guidance and a legal status', async ({ page }) => {
       await addPokemon(page, 1, 'Bulbasaur');
       await battleFormatSelect(page).selectOption({ label: 'Singles — Species Clause' });
 
       await expect(page.getByText(/one of each species/i)).toBeVisible();
-      await expect(page.getByRole('status')).toHaveText(
+      await expect(page.locator('.team-legality-status')).toHaveText(
         'Team composition is legal for this planner profile.'
       );
       await expect(page.getByText('1/6 selected')).toBeVisible();
     });
 
+    // Verifies the scenario: Switching format reports duplicate issues without rewriting the team.
     teamPlannerTest(
       'Switching format reports duplicate issues without rewriting the team',
       async ({ page }) => {
@@ -412,6 +474,7 @@ test.describe('@live Pokemon Team Planner', () => {
       }
     );
 
+    // Verifies the scenario: No Restricted VGC profile disables a restricted Pokemon.
     teamPlannerTest('No Restricted VGC profile disables a restricted Pokemon', async ({ page }) => {
       await battleFormatSelect(page).selectOption({ label: 'VGC Doubles — No Restricted' });
       await page.getByRole('searchbox', { name: 'Pokemon' }).fill('Mewtwo');
@@ -424,6 +487,7 @@ test.describe('@live Pokemon Team Planner', () => {
       );
     });
 
+    // Verifies the scenario: VGC format reports an existing Mega form without silently changing it.
     teamPlannerTest(
       'VGC format reports an existing Mega form without silently changing it',
       async ({ page }) => {
@@ -444,6 +508,7 @@ test.describe('@live Pokemon Team Planner', () => {
   });
 
   test.describe('World Champion Teams', () => {
+    // Verifies the scenario: Loads the selected champion roster into an empty team.
     teamPlannerTest('Loads the selected champion roster into an empty team', async ({ page }) => {
       const championSelect = page.getByRole('combobox', { name: /world champion team/i });
       await expect(championSelect.locator('option')).toHaveCount(15);
@@ -457,6 +522,7 @@ test.describe('@live Pokemon Team Planner', () => {
       ).toBeVisible();
     });
 
+    // Verifies the scenario: Offers safe choices when a champion roster would replace work.
     teamPlannerTest(
       'Offers safe choices when a champion roster would replace work',
       async ({ page }) => {
@@ -478,6 +544,7 @@ test.describe('@live Pokemon Team Planner', () => {
       }
     );
 
+    // Verifies the scenario: Fill Remaining keeps the existing member.
     teamPlannerTest('Fill Remaining keeps the existing member', async ({ page }) => {
       await addPokemon(page, 1, 'Bulbasaur');
       await page.getByRole('button', { name: /^fill champion team$/i }).click();
@@ -493,6 +560,7 @@ test.describe('@live Pokemon Team Planner', () => {
   });
 
   test.describe('Build Customization', () => {
+    // Verifies the scenario: Shows sourced moves, abilities, nature, and analysis for a build.
     teamPlannerTest(
       'Shows sourced moves, abilities, nature, and analysis for a build',
       async ({ page }) => {
@@ -511,6 +579,7 @@ test.describe('@live Pokemon Team Planner', () => {
       }
     );
 
+    // Verifies the scenario: Ability selection opens an accessible detail dialog.
     teamPlannerTest('Ability selection opens an accessible detail dialog', async ({ page }) => {
       await addPokemon(page, 6, 'Charizard');
       await teamCard(page, 'Charizard')
@@ -526,6 +595,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(dialog).toBeHidden();
     });
 
+    // Verifies the scenario: Nature picker can search and apply a different nature.
     teamPlannerTest('Nature picker can search and apply a different nature', async ({ page }) => {
       await addPokemon(page, 1, 'Bulbasaur');
       await page.getByRole('button', { name: /change bulbasaur's nature/i }).click();
@@ -541,6 +611,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(teamCard(page, 'Bulbasaur')).toContainText('+Speed / -Special Attack');
     });
 
+    // Verifies the scenario: Changing form refreshes identity, typing, BST, and ability.
     teamPlannerTest(
       'Changing form refreshes identity, typing, BST, and ability',
       async ({ page }) => {
@@ -560,6 +631,7 @@ test.describe('@live Pokemon Team Planner', () => {
       }
     );
 
+    // Verifies the scenario: Move changes immediately update move and coverage analysis.
     teamPlannerTest(
       'Move changes immediately update move and coverage analysis',
       async ({ page }) => {
@@ -584,6 +656,7 @@ test.describe('@live Pokemon Team Planner', () => {
       }
     );
 
+    // Verifies the scenario: Nature effects toggle switches between adjusted and base stats.
     teamPlannerTest(
       'Nature effects toggle switches between adjusted and base stats',
       async ({ page }) => {
@@ -601,6 +674,7 @@ test.describe('@live Pokemon Team Planner', () => {
   });
 
   test.describe('Assistant and Recommendations', () => {
+    // Verifies the scenario: Adding a Pokemon produces a bounded transparent score.
     teamPlannerTest('Adding a Pokemon produces a bounded transparent score', async ({ page }) => {
       await addPokemon(page, 6, 'Charizard');
 
@@ -612,6 +686,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(page.getByLabel('Team score factors').getByRole('meter')).toHaveCount(6);
     });
 
+    // Verifies the scenario: Assistant reports roles and recommendation evidence.
     teamPlannerTest('Assistant reports roles and recommendation evidence', async ({ page }) => {
       await addPokemon(page, 6, 'Charizard');
 
@@ -626,6 +701,7 @@ test.describe('@live Pokemon Team Planner', () => {
       ).toBeVisible();
     });
 
+    // Verifies the scenario: Adds an individual recommendation to a partial team.
     teamPlannerTest('Adds an individual recommendation to a partial team', async ({ page }) => {
       await addPokemon(page, 1, 'Bulbasaur');
       await recommendationButtons(page).first().click();
@@ -635,6 +711,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(page.getByRole('button', { name: /^remove bulbasaur$/i })).toBeVisible();
     });
 
+    // Verifies the scenario: Full-team recommendation previews, applies, and undoes a swap.
     teamPlannerTest(
       'Full-team recommendation previews, applies, and undoes a swap',
       async ({ page }) => {
@@ -677,6 +754,7 @@ test.describe('@live Pokemon Team Planner', () => {
   });
 
   test.describe('Navigation and State Lifetime', () => {
+    // Verifies the scenario: Menu overlay preserves the in-progress team.
     teamPlannerTest('Menu overlay preserves the in-progress team', async ({ page }) => {
       await addPokemon(page, 1, 'Bulbasaur');
       await page.getByRole('button', { name: /^menu$/i }).click();
@@ -686,6 +764,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(page.getByRole('button', { name: /^remove bulbasaur$/i })).toBeVisible();
     });
 
+    // Verifies the scenario: Menu can return to the station chooser.
     teamPlannerTest('Menu can return to the station chooser', async ({ page }) => {
       await page.getByRole('button', { name: /^menu$/i }).click();
       await page.getByRole('button', { name: /^home$/i }).click();
@@ -694,7 +773,8 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(page.getByRole('button', { name: /pokemon team planner/i })).toBeVisible();
     });
 
-    teamPlannerTest('Reload resets memory-only team state', async ({ page }) => {
+    // Verifies the scenario: Reload still discards an unsaved team.
+    teamPlannerTest('Reload still discards an unsaved team', async ({ page }) => {
       await addPokemon(page, 1, 'Bulbasaur');
       await page.reload();
       await expect(page.getByText(/choose (?:your|a) station/i)).toBeVisible();
@@ -703,9 +783,117 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(page.getByText('0/6 selected')).toBeVisible();
       await expect(occupiedTeamCards(page)).toHaveCount(0);
     });
+
+    // Verifies the scenario: Saved planner choices and build customizations survive reload.
+    teamPlannerTest(
+      'Saved planner choices and build customizations survive reload',
+      async ({ page }) => {
+        await addPokemon(page, 1, 'Bulbasaur');
+        await moveSelect(page, 1).selectOption('vine-whip');
+        await gamePokedexSelect(page).selectOption({ label: 'Ruby / Sapphire / Emerald' });
+
+        const selectedDex = await gamePokedexSelect(page).inputValue();
+        const selectedBattleFormat = await battleFormatSelect(page)
+          .locator('option')
+          .nth(1)
+          .getAttribute('value');
+        const selectedChampionYear = await page
+          .getByRole('combobox', { name: /world champion team/i })
+          .locator('option')
+          .nth(1)
+          .getAttribute('value');
+
+        expect(selectedBattleFormat).toBeTruthy();
+        expect(selectedChampionYear).toBeTruthy();
+        await battleFormatSelect(page).selectOption(selectedBattleFormat ?? '');
+        await page
+          .getByRole('combobox', { name: /world champion team/i })
+          .selectOption(selectedChampionYear ?? '');
+
+        const natureEffectsToggle = page.getByRole('checkbox', { name: /nature effects/i });
+        await natureEffectsToggle.press('Space');
+        await expect(natureEffectsToggle).not.toBeChecked();
+
+        const saveButton = page.getByRole('button', { name: /^save team$/i });
+        await expect(saveButton).toBeEnabled();
+        await saveButton.click();
+
+        await expect(page.getByRole('button', { name: /^team saved$/i })).toBeDisabled();
+        await expect(page.getByText(/this team will be restored after reload/i)).toBeVisible();
+        await expect
+          .poll(() =>
+            page.evaluate((storageKey) => {
+              const savedPlanner = JSON.parse(localStorage.getItem(storageKey) ?? '{}');
+
+              return {
+                memberCount: savedPlanner.teamMembers?.length,
+                selectedBattleFormat: savedPlanner.selectedBattleFormat,
+                selectedChampionYear: String(savedPlanner.selectedChampionYear),
+                selectedDex: savedPlanner.selectedDex,
+                selectedMoves: savedPlanner.teamMembers?.[0]?.selectedMoves,
+                useNatureAdjustedStats: savedPlanner.useNatureAdjustedStats
+              };
+            }, teamPlannerStorageKey)
+          )
+          .toEqual({
+            memberCount: 1,
+            selectedBattleFormat,
+            selectedChampionYear,
+            selectedDex,
+            selectedMoves: expect.arrayContaining(['vine-whip']),
+            useNatureAdjustedStats: false
+          });
+
+        await page.reload();
+        await expect(page.getByText(/choose (?:your|a) station/i)).toBeVisible();
+        await page.getByRole('button', { name: /pokemon team planner/i }).click();
+
+        await expect(page.getByText('1/6 selected')).toBeVisible();
+        await expect(teamCard(page, 'Bulbasaur')).toBeVisible();
+        await expect(gamePokedexSelect(page)).toHaveValue(selectedDex);
+        await expect(battleFormatSelect(page)).toHaveValue(selectedBattleFormat ?? '');
+        await expect(page.getByRole('combobox', { name: /world champion team/i })).toHaveValue(
+          selectedChampionYear ?? ''
+        );
+        await expect(natureEffectsToggle).not.toBeChecked();
+        await expect(moveSelect(page, 1).locator('option:checked')).toContainText(/Vine Whip/i);
+        await expect(page.getByRole('button', { name: /^team saved$/i })).toBeDisabled();
+
+        await moveSelect(page, 1).selectOption('');
+        await expect(page.getByRole('button', { name: /^save team$/i })).toBeEnabled();
+      }
+    );
+
+    // Verifies the scenario: Ignores a malformed saved planner snapshot.
+    test('Ignores a malformed saved planner snapshot', async ({ page }) => {
+      await page.goto('/');
+      try {
+        await page.evaluate((storageKey) => {
+          localStorage.setItem(
+            storageKey,
+            JSON.stringify({
+              selectedDex: 'hoenn',
+              selectedBattleFormat: 'not-a-format',
+              teamMembers: [{ id: 1, name: null }]
+            })
+          );
+        }, teamPlannerStorageKey);
+        await page.getByRole('button', { name: /pokemon team planner/i }).click();
+
+        await expect(gamePokedexSelect(page)).toHaveValue('all');
+        await expect(battleFormatSelect(page)).toHaveValue('open');
+        await expect(page.getByText('0/6 selected')).toBeVisible();
+        await expect(occupiedTeamCards(page)).toHaveCount(0);
+      } finally {
+        await page
+          .evaluate((storageKey) => localStorage.removeItem(storageKey), teamPlannerStorageKey)
+          .catch(() => {});
+      }
+    });
   });
 
   test.describe('Edge / Reliability', () => {
+    // Verifies the scenario: Rapid selection attempts never overflow six slots.
     teamPlannerTest('Rapid selection attempts never overflow six slots', async ({ page }) => {
       for (const pokemon of [
         [1, 'Bulbasaur'],
@@ -724,6 +912,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(pokemonListButton(page, 7, 'Squirtle')).toBeDisabled();
     });
 
+    // Verifies the scenario: Repeated fill and clear cycles leave controls usable.
     teamPlannerTest('Repeated fill and clear cycles leave controls usable', async ({ page }) => {
       for (let attempt = 0; attempt < 2; attempt += 1) {
         await page.getByRole('button', { name: /^fill randomly$/i }).click();
@@ -736,6 +925,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeEnabled();
     });
 
+    // Verifies the scenario: Image failures do not block planner interactions.
     test('Image failures do not block planner interactions', async ({ page }) => {
       await page.route('**/*.{png,jpg,jpeg,gif,webp,svg}', (route) => route.abort());
       await openTeamPlanner(page);
@@ -746,6 +936,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(page.getByRole('button', { name: /^remove all$/i })).toBeEnabled();
     });
 
+    // Verifies the scenario: Very long search text fails safely and remains recoverable.
     teamPlannerTest(
       'Very long search text fails safely and remains recoverable',
       async ({ page }) => {
@@ -761,6 +952,7 @@ test.describe('@live Pokemon Team Planner', () => {
       }
     );
 
+    // Verifies the scenario: Closing the nature dialog leaves build controls unchanged.
     teamPlannerTest(
       'Closing the nature dialog leaves build controls unchanged',
       async ({ page }) => {
