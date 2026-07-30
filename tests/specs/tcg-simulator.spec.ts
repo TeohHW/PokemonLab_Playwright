@@ -275,7 +275,7 @@ test.describe('Pokemon TCG Simulator', () => {
 
   // Locates a Special / Limited reference set by its user-facing set name.
   function referenceSetButton(page: Page, setName: string) {
-    return page.getByRole('button', {
+    return page.getByLabel('Expansion sets').getByRole('button', {
       name: new RegExp(setName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
     });
   }
@@ -305,9 +305,7 @@ test.describe('Pokemon TCG Simulator', () => {
   }
 
   function unownedArtworkToggle(page: Page) {
-    return page
-      .getByLabel('Collection binder')
-      .getByRole('button', { name: /Unowned card artwork:/i });
+    return page.getByRole('button', { name: /Unowned card artwork:/i });
   }
 
   async function visibleBinderCardRarities(page: Page) {
@@ -1105,6 +1103,14 @@ test.describe('Pokemon TCG Simulator', () => {
         await expect(
           pokemonCardResultButton(page, "Galarian Sirfetch'd V", 'Vivid Voltage')
         ).toBeVisible();
+      });
+
+      // Verifies set and Pokemon terms can be combined in one search query.
+      tcgTest('Combined set and Pokemon search lists the matching card', async ({ page }) => {
+        await expansionSearchInput(page).fill('Base Set Charizard');
+
+        await expect(expansionSetButton(page, 'Base', 'Base', 1999)).toBeVisible();
+        await expect(pokemonCardResultButton(page, 'Charizard', 'Base')).toBeVisible();
       });
 
       // Verifies choosing a Pokemon search card opens that selected card from its set.
