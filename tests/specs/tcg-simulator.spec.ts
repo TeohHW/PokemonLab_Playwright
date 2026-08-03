@@ -4,11 +4,6 @@ import { test, expect } from '../fixtures/test';
 test.describe('Pokemon TCG Simulator', () => {
   test.describe.configure({ timeout: 60_000 });
 
-  test.skip(
-    ({ browserName }) => process.env.CI === 'true' && browserName === 'webkit',
-    'TCG simulator is flaky on CI WebKit; covered by Chromium, Firefox, and local WebKit runs.'
-  );
-
   const transparentPng = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
     'base64'
@@ -21,12 +16,17 @@ test.describe('Pokemon TCG Simulator', () => {
   async function enterTcgSimulator(page: Page) {
     const packButton = openOnePackButton(page);
 
+    if (new URL(page.url()).hash.startsWith('#/tcg')) {
+      await expect(packButton).toBeEnabled({ timeout: 30_000 });
+      return packButton;
+    }
+
     if (await packButton.isVisible({ timeout: 5_000 }).catch(() => false)) {
       await expect(packButton).toBeEnabled({ timeout: 30_000 });
       return packButton;
     }
 
-    const simulatorButton = page.getByRole('button', { name: /pokemon tcg simulator/i });
+    const simulatorButton = page.locator('.choice-card-tcg');
 
     await expect(simulatorButton).toBeEnabled({ timeout: 30_000 });
     await simulatorButton.click();
@@ -55,6 +55,8 @@ test.describe('Pokemon TCG Simulator', () => {
         await page.goto('/');
         await page.evaluate(() => {
           localStorage.removeItem('pokemon-pack-simulator-collection');
+          localStorage.removeItem('pokemon-lab-tcg-view-v1');
+          localStorage.removeItem('pokemon-lab-tcg-pull-history-v1');
         });
         await enterTcgSimulator(page);
         await use();
@@ -75,7 +77,7 @@ test.describe('Pokemon TCG Simulator', () => {
     await expect(packButton).toBeEnabled({ timeout: 30_000 });
     await packButton.click();
     await expect(packDialog(page)).toBeVisible();
-    await expectRevealedCardsWithImageSrc(page, 10);
+    await expectRevealedPackCards(page, 10);
 
     return packDialog(page);
   }
@@ -223,20 +225,35 @@ test.describe('Pokemon TCG Simulator', () => {
     });
   }
 
-  // Verifies revealed card images are present and point to real image sources.
-  async function expectRevealedCardsWithImageSrc(page: Page, expectedCardCount: number) {
-    const revealedCards = page.locator('.pack-grid img:not(.card-back-image)');
+  // Verifies every generated card is revealed and unavailable artwork is excluded explicitly.
+  async function expectRevealedPackCards(page: Page, expectedCardCount: number) {
+    const revealedCards = page.locator('.pack-grid [data-card-art-entry]');
 
     await expect(revealedCards).toHaveCount(expectedCardCount);
+    await expect
+      .poll(
+        async () =>
+          revealedCards.evaluateAll((cards) =>
+            cards.every((card) => {
+              const faceImage = card.querySelector('img:not(.card-back-image)');
+              const hasFaceSource = Boolean(faceImage?.getAttribute('src'));
+              const isUnavailable =
+                card instanceof HTMLElement &&
+                faceImage instanceof HTMLImageElement &&
+                card.hidden &&
+                faceImage.hidden &&
+                !hasFaceSource;
 
-    const imageSources = await revealedCards.evaluateAll((cards) =>
-      cards.map((card) => card.getAttribute('src'))
-    );
-
-    expect(imageSources).toHaveLength(expectedCardCount);
-    for (const imageSource of imageSources) {
-      expect(imageSource).toBeTruthy();
-    }
+              return (
+                card.classList.contains('is-flipped') &&
+                card.getAttribute('aria-label')?.startsWith('Open ') === true &&
+                (hasFaceSource || isUnavailable)
+              );
+            })
+          ),
+        { timeout: 30_000 }
+      )
+      .toBe(true);
   }
 
   // Locates one expansion-set tile by its accessible button name.
@@ -306,6 +323,12 @@ test.describe('Pokemon TCG Simulator', () => {
 
   function unownedArtworkToggle(page: Page) {
     return page.getByRole('button', { name: /Unowned card artwork:/i });
+  }
+
+  function binderFilterButton(page: Page, filterName: string) {
+    return page
+      .getByLabel('Filter binder by ownership')
+      .getByRole('button', { name: new RegExp(`^${filterName}$`, 'i') });
   }
 
   async function visibleBinderCardRarities(page: Page) {
@@ -401,6 +424,34 @@ test.describe('Pokemon TCG Simulator', () => {
           ).toBeTruthy();
         }
       );
+
+      test('Expansion-data failure exposes Retry and recovers the simulator', async ({
+        context,
+        page
+      }) => {
+        let failExpansionRequest = true;
+        await context.route('https://images.pokemontcg.io/**', (route) =>
+          route.fulfill({ status: 200, contentType: 'image/png', body: transparentPng })
+        );
+        await page.route('**/expansions.json', (route) =>
+          failExpansionRequest
+            ? route.fulfill({ status: 503, contentType: 'application/json', body: '{}' })
+            : route.continue()
+        );
+        await page.goto('/');
+        await page.getByRole('button', { name: /pokemon tcg simulator/i }).click();
+
+        const error = page.getByRole('alert');
+        await expect(error).toContainText(/unable to load the local card database/i);
+        const retry = error.getByRole('button', { name: /^retry$/i });
+        await expect(retry).toBeVisible();
+
+        failExpansionRequest = false;
+        await retry.click();
+
+        await expect(openOnePackButton(page)).toBeEnabled({ timeout: 30_000 });
+        await expect(page.getByLabel('Collection binder')).toBeVisible();
+      });
     });
 
     test.describe('Pack opening', () => {
@@ -426,13 +477,140 @@ test.describe('Pokemon TCG Simulator', () => {
         await expect(page.getByRole('button', { name: 'Clear This Binder' })).toBeEnabled();
       });
 
+      tcgTest(
+        'Skip Animation finishes one reveal, adds cards once, and records the pull',
+        async ({ page }) => {
+          await openOnePackButton(page).click();
+          const dialog = packDialog(page);
+          await expect(dialog).toBeVisible();
+
+          await dialog.getByRole('button', { name: /^skip animation$/i }).press('Enter');
+          await expectRevealedPackCards(page, 10);
+          await expect(dialog.getByRole('button', { name: /^reveal all$/i })).toBeDisabled();
+          await expect
+            .poll(() =>
+              page.evaluate(() => {
+                const collection = JSON.parse(
+                  localStorage.getItem('pokemon-pack-simulator-collection') ?? '{}'
+                ) as Record<string, { count?: number }>;
+                return Object.values(collection).reduce(
+                  (total, card) => total + (card.count ?? 0),
+                  0
+                );
+              })
+            )
+            .toBe(10);
+
+          await dialog.getByRole('button', { name: /^close$/i }).click();
+          await expect(binderFilterButton(page, 'Latest Pull')).toBeEnabled();
+          await binderFilterButton(page, 'Latest Pull').click();
+
+          const latestPullCards = page
+            .getByLabel('Collection binder')
+            .locator('.binder-card:visible');
+          await expect.poll(() => latestPullCards.count()).toBeGreaterThan(0);
+          expect(await latestPullCards.count()).toBeLessThanOrEqual(10);
+          await expect(page.getByText(/recent pulls \(1\)/i)).toBeVisible();
+          await page.getByText(/recent pulls \(1\)/i).click();
+          await expect(page.locator('.pull-history-list')).toContainText(/Base/i);
+          await expect(page.locator('.pull-history-list')).toContainText(/10 cards/i);
+
+          expect(
+            await page.evaluate(() => {
+              const history = JSON.parse(
+                localStorage.getItem('pokemon-lab-tcg-pull-history-v1') ?? '[]'
+              );
+              return history.length;
+            })
+          ).toBe(1);
+        }
+      );
+
+      tcgTest('Pull history retains only the ten newest pack openings', async ({ page }) => {
+        await page.evaluate(() => {
+          const seededHistory = Array.from({ length: 10 }, (_, index) => ({
+            id: `seeded-${index}`,
+            setId: 'base1',
+            setName: 'Base',
+            cardCount: 10,
+            newCount: 0,
+            rareNames: [],
+            openedAt: 10 - index
+          }));
+          localStorage.setItem('pokemon-lab-tcg-pull-history-v1', JSON.stringify(seededHistory));
+        });
+        await page.reload();
+        await expect(openOnePackButton(page)).toBeEnabled({ timeout: 30_000 });
+
+        await openOnePackButton(page).click();
+        await packDialog(page)
+          .getByRole('button', { name: /^skip animation$/i })
+          .press('Enter');
+
+        await expect
+          .poll(() =>
+            page.evaluate(() =>
+              JSON.parse(localStorage.getItem('pokemon-lab-tcg-pull-history-v1') ?? '[]')
+            )
+          )
+          .toHaveLength(10);
+        const storedIds = await page.evaluate(
+          () =>
+            JSON.parse(localStorage.getItem('pokemon-lab-tcg-pull-history-v1') ?? '[]') as Array<{
+              id: string;
+            }>
+        );
+        expect(storedIds[0].id).not.toMatch(/^seeded-/);
+        expect(storedIds.map(({ id }) => id)).not.toContain('seeded-9');
+        await expect(page.getByText(/recent pulls \(10\)/i)).toBeVisible();
+      });
+
+      tcgTest(
+        'Unrevealed pack cards support Enter and Space while retaining card backs',
+        async ({ page }) => {
+          await openOnePackButton(page).click();
+          const dialog = packDialog(page);
+          const packCards = dialog.locator('.card-container');
+
+          await expect(packCards).toHaveCount(10);
+          await expect(dialog.locator('.card-back-image')).toHaveCount(10);
+          const enterCard = packCards.last();
+          const spaceCard = packCards.nth(8);
+          await expect(enterCard).toHaveAttribute('aria-label', 'Reveal card');
+          await enterCard.press('Enter');
+          await expect(enterCard).toHaveAttribute('aria-label', /^Open /);
+          await spaceCard.press('Space');
+          await expect(spaceCard).toHaveAttribute('aria-label', /^Open /);
+        }
+      );
+
+      tcgTest('Automatic reveal adds every opened card exactly once', async ({ page }) => {
+        await openOnePackButton(page).click();
+        await expect(packDialog(page).getByRole('button', { name: /^close$/i })).toBeEnabled({
+          timeout: 30_000
+        });
+        await expect
+          .poll(() =>
+            page.evaluate(() => {
+              const collection = JSON.parse(
+                localStorage.getItem('pokemon-pack-simulator-collection') ?? '{}'
+              ) as Record<string, { count?: number }>;
+              return Object.values(collection).reduce(
+                (total, card) => total + (card.count ?? 0),
+                0
+              );
+            })
+          )
+          .toBe(10);
+      });
+
       // Verifies a god pack reveals 10 cards and every revealed card is marked holo.
       tcgTest('Open god pack', async ({ page }) => {
         await page.getByRole('button', { name: /^open god pack$/i }).click();
 
         const openedPack = page.locator('.pack-grid');
         await expect(openedPack).toBeVisible();
-        await expectRevealedCardsWithImageSrc(page, 10);
+        await expectRevealedPackCards(page, 10);
         await expect(openedPack.locator('.holo-overlay')).toHaveCount(10);
       });
 
@@ -441,7 +619,7 @@ test.describe('Pokemon TCG Simulator', () => {
         await page.getByRole('button', { name: /^open 10 packs$/i }).click();
 
         await expect(page.locator('.pack-grid')).toBeVisible();
-        await expectRevealedCardsWithImageSrc(page, 100);
+        await expectRevealedPackCards(page, 100);
 
         await page.getByRole('button', { name: /^close$/i }).click();
         await expect(page.getByRole('button', { name: 'Clear This Binder' })).toBeEnabled();
@@ -450,7 +628,7 @@ test.describe('Pokemon TCG Simulator', () => {
       // Verifies a god pack still contributes unique cards to the selected binder.
       tcgTest('Open god pack updates binder progress', async ({ page }) => {
         await page.getByRole('button', { name: /^open god pack$/i }).click();
-        await expectRevealedCardsWithImageSrc(page, 10);
+        await expectRevealedPackCards(page, 10);
         await page.getByRole('button', { name: /^close$/i }).click();
 
         const baseProgress = await getCollectionProgress(page, 'Base', 102);
@@ -463,7 +641,7 @@ test.describe('Pokemon TCG Simulator', () => {
         await page.getByRole('button', { name: /^open random pack$/i }).click();
 
         await expect(page.locator('.pack-grid')).toBeVisible();
-        await expectRevealedCardsWithImageSrc(page, 10);
+        await expectRevealedPackCards(page, 10);
         await expect(page.locator('.pack-set-logo')).toBeVisible();
         await expect(page.getByRole('button', { name: /^close$/i })).toBeVisible();
       });
@@ -509,6 +687,92 @@ test.describe('Pokemon TCG Simulator', () => {
     });
 
     test.describe('Binder', () => {
+      tcgTest(
+        'Ownership filters distinguish owned, missing, and duplicate cards',
+        async ({ page }) => {
+          await seedDuplicatedBaseCard(page);
+          await page.reload();
+          await expect(openOnePackButton(page)).toBeEnabled({ timeout: 30_000 });
+
+          await binderFilterButton(page, 'Owned').click();
+          await expect(binderCardName(page, 'Abra')).toBeVisible();
+          await expect(binderCardName(page, 'Alakazam')).toBeHidden();
+
+          await binderFilterButton(page, 'Missing').click();
+          await expect(binderCardName(page, 'Alakazam')).toBeVisible();
+          await expect(binderCardName(page, 'Abra')).toBeHidden();
+
+          await binderFilterButton(page, 'Duplicates').click();
+          await expect(binderCardName(page, 'Abra')).toBeVisible();
+          await expect(
+            page.getByLabel('Collection binder').locator('.binder-card:visible')
+          ).toHaveCount(1);
+
+          await binderFilterButton(page, 'All').click();
+          await expect(binderCardName(page, 'Abra')).toBeVisible();
+          await expect(binderCardName(page, 'Alakazam')).toBeVisible();
+        }
+      );
+
+      test('Failed face-image candidates are tried in order before the card is hidden', async ({
+        context,
+        page
+      }) => {
+        const attemptedAlakazamImages: string[] = [];
+        await context.route('https://images.pokemontcg.io/**', (route) =>
+          route.fulfill({
+            status: 200,
+            contentType: 'image/png',
+            body: transparentPng
+          })
+        );
+        await page.route(/images\.pokemontcg\.io\/base1\/1(?:_hires)?\.png$/i, (route) => {
+          attemptedAlakazamImages.push(route.request().url());
+          return route.fulfill({
+            status: 404,
+            contentType: 'image/png',
+            body: ''
+          });
+        });
+
+        await page.goto('/');
+        await page.evaluate(() => {
+          localStorage.removeItem('pokemon-pack-simulator-collection');
+          localStorage.removeItem('pokemon-lab-tcg-view-v1');
+          localStorage.removeItem('pokemon-lab-tcg-pull-history-v1');
+        });
+        await enterTcgSimulator(page);
+        await page.getByLabel('Collection binder').locator('.binder-grid').scrollIntoViewIfNeeded();
+        await expect
+          .poll(() => attemptedAlakazamImages.length, { timeout: 30_000 })
+          .toBeGreaterThanOrEqual(2);
+        await expect(binderCardButton(page, 'Alakazam')).toBeHidden({ timeout: 30_000 });
+
+        const attemptsBeforeReload = attemptedAlakazamImages.length;
+        await page.reload();
+        await expect(openOnePackButton(page)).toBeEnabled({ timeout: 30_000 });
+        await page.getByLabel('Collection binder').locator('.binder-grid').scrollIntoViewIfNeeded();
+        await expect(binderCardButton(page, 'Alakazam')).toBeHidden({ timeout: 30_000 });
+
+        const unavailableAlakazam = page
+          .getByLabel('Collection binder')
+          .locator('[data-card-art-entry]')
+          .filter({ hasText: /^Alakazam/ });
+        await expect(unavailableAlakazam).toHaveAttribute('hidden', '');
+        await expect(unavailableAlakazam).toHaveCSS('display', 'none');
+
+        expect(attemptedAlakazamImages.length).toBeGreaterThanOrEqual(2);
+        expect(attemptedAlakazamImages[0]).toMatch(/\/base1\/1_hires\.png$/i);
+        expect(attemptedAlakazamImages[1]).toMatch(/\/base1\/1\.png$/i);
+        expect(attemptedAlakazamImages.length).toBeGreaterThan(attemptsBeforeReload);
+        await expect(page.getByLabel('Collection binder').locator('.card-back-image')).toHaveCount(
+          0
+        );
+
+        await binderFilterButton(page, 'Missing').click();
+        await expect(unavailableAlakazam).toHaveCSS('display', 'none');
+      });
+
       // Verifies Base and Fossil progress are tracked independently as packs are opened.
       tcgTest('Binder collection update for selected set', async ({ page }) => {
         expect(await getCollectionProgress(page, 'Base', 102)).toBe(0);
@@ -520,7 +784,7 @@ test.describe('Pokemon TCG Simulator', () => {
         expect(await getCollectionProgress(page, 'Base', 102)).toBe(0);
 
         await page.getByRole('button', { name: /^open 10 packs$/i }).click();
-        await expectRevealedCardsWithImageSrc(page, 100);
+        await expectRevealedPackCards(page, 100);
         await page.getByRole('button', { name: /^close$/i }).click();
 
         const baseProgressAfterOpeningPacks = await getCollectionProgress(page, 'Base', 102);
@@ -531,7 +795,7 @@ test.describe('Pokemon TCG Simulator', () => {
         expect(await getCollectionProgress(page, 'Fossil', 62)).toBe(0);
 
         await page.getByRole('button', { name: /^open 10 packs$/i }).click();
-        await expectRevealedCardsWithImageSrc(page, 100);
+        await expectRevealedPackCards(page, 100);
         await page.getByRole('button', { name: /^close$/i }).click();
 
         const fossilProgressAfterOpeningPacks = await getCollectionProgress(page, 'Fossil', 62);
@@ -581,7 +845,7 @@ test.describe('Pokemon TCG Simulator', () => {
         expect(await getCollectionProgress(page, 'Base', 102)).toBe(102);
 
         await page.getByRole('button', { name: /^open 10 packs$/i }).click();
-        await expectRevealedCardsWithImageSrc(page, 100);
+        await expectRevealedPackCards(page, 100);
         await page.getByRole('button', { name: /^close$/i }).click();
 
         expect(await getCollectionProgress(page, 'Base', 102)).toBe(102);
@@ -690,8 +954,12 @@ test.describe('Pokemon TCG Simulator', () => {
       tcgTest(
         'Opening a pack persists binder progress after closing and reopening the page',
         async ({ context, page }) => {
-          await openDefaultPack(page);
-          await page.getByRole('button', { name: /^close$/i }).click();
+          await openOnePackButton(page).click();
+          const dialog = packDialog(page);
+          await expect(dialog).toBeVisible();
+          await dialog.getByRole('button', { name: /^skip animation$/i }).press('Enter');
+          await expect(dialog.getByRole('button', { name: /^close$/i })).toBeEnabled();
+          await dialog.getByRole('button', { name: /^close$/i }).click();
 
           const baseProgress = await getCollectionProgress(page, 'Base', 102);
           expect(baseProgress).toBeGreaterThan(0);
@@ -843,8 +1111,27 @@ test.describe('Pokemon TCG Simulator', () => {
         await page.getByRole('button', { name: /^open 1 pack$/i }).click();
 
         await expect(page.locator('.pack-set-logo')).toHaveAttribute('alt', /^Jungle logo$/);
-        await expectRevealedCardsWithImageSrc(page, 10);
+        await expectRevealedPackCards(page, 10);
       });
+
+      tcgTest(
+        'Selected set is represented in the route and restored after reload',
+        async ({ page }) => {
+          await expansionSetButton(page, 'Fossil', 'Base', 1999).click();
+
+          await expect(page).toHaveURL(/#\/tcg\?set=base3$/);
+          await expect(page.getByLabel('Collection binder')).toContainText(
+            'Fossil collection progress: 0 / 62 unique cards'
+          );
+
+          await page.reload();
+
+          await expect(openOnePackButton(page)).toBeEnabled({ timeout: 30_000 });
+          await expect(page.getByLabel('Collection binder')).toContainText(
+            'Fossil collection progress: 0 / 62 unique cards'
+          );
+        }
+      );
 
       // Verifies sort options reorder the visible expansion-set tiles.
       tcgTest('Sort sets by newest and by name', async ({ page }) => {
@@ -966,7 +1253,7 @@ test.describe('Pokemon TCG Simulator', () => {
           page.getByRole('dialog').getByRole('img', { name: 'Team Up logo' })
         ).toBeVisible();
         await expect(page.locator('.pack-grid')).toBeVisible();
-        await expectRevealedCardsWithImageSrc(page, 10);
+        await expectRevealedPackCards(page, 10);
       });
 
       // Verifies an unmatched expansion search displays no expansion-set tiles.

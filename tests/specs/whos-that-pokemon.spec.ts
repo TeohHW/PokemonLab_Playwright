@@ -127,19 +127,12 @@ test.describe("@live Who's That Pokemon", () => {
     return `TRAINER${randomSuffix}QWERTYUIOPASDFGHJKLZXCVBNM1234567890`;
   }
 
-  // Reads non-system buttons that appear as help choices.
-  async function helpChoiceLabels(page: Page) {
-    return page
-      .locator('button')
-      .evaluateAll((buttons) =>
-        buttons
-          .map((button) => button.textContent?.trim() ?? '')
-          .filter(
-            (label) =>
-              label.length > 0 &&
-              !/^(who's that pokemon\?|menu|help|guess|next pokemon)$/i.test(label)
-          )
-      );
+  function difficultySelect(page: Page) {
+    return page.getByRole('combobox', { name: /^difficulty/i });
+  }
+
+  function sessionSelect(page: Page) {
+    return page.getByRole('combobox', { name: /^session/i });
   }
 
   test.describe('Station / Initial Load', () => {
@@ -150,7 +143,7 @@ test.describe("@live Who's That Pokemon", () => {
       await expect(page.getByRole('button', { name: /^start game$/i })).toBeVisible();
       await expect(page.getByText(/^region$/i)).toBeVisible();
       await expect(page.getByRole('button', { name: /^random region/i })).toBeVisible();
-      await expect(page.getByText('LEADERBOARD')).toBeVisible();
+      await expect(page.getByRole('heading', { name: /^leaderboard$/i })).toBeVisible();
       await expect(page.getByText('No scores yet.')).toBeVisible();
     });
 
@@ -185,7 +178,7 @@ test.describe("@live Who's That Pokemon", () => {
       await expect(page.getByRole('textbox')).toBeVisible();
       await expect(page.getByRole('button', { name: /^start game$/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /^random region/i })).toBeVisible();
-      await expect(page.getByText('LEADERBOARD')).toBeVisible();
+      await expect(page.getByRole('heading', { name: /^leaderboard$/i })).toBeVisible();
       await expect(page.locator('.who-setup-layout')).toHaveCSS(
         'grid-template-columns',
         /^\d+(?:\.\d+)?px$/
@@ -228,7 +221,7 @@ test.describe("@live Who's That Pokemon", () => {
 
         await page.getByRole('button', { name: /who's that pokemon/i }).click();
 
-        await expect(page.getByText('LEADERBOARD')).toBeVisible();
+        await expect(page.getByRole('heading', { name: /^leaderboard$/i })).toBeVisible();
         await expect(page.getByText(/^Ash$/)).toBeVisible();
         await expect(page.getByText(/^\s+Ash\s+$/)).toHaveCount(0);
       }
@@ -253,7 +246,7 @@ test.describe("@live Who's That Pokemon", () => {
 
         await page.getByRole('button', { name: /who's that pokemon/i }).click();
 
-        await expect(page.getByText('LEADERBOARD')).toBeVisible();
+        await expect(page.getByRole('heading', { name: /^leaderboard$/i })).toBeVisible();
         await expect(page.getByText(displayedTrainerName, { exact: true })).toBeVisible();
         await expect(page.getByText(longTrainerName, { exact: true })).toHaveCount(0);
       }
@@ -280,7 +273,7 @@ test.describe("@live Who's That Pokemon", () => {
 
         await page.getByRole('button', { name: /who's that pokemon/i }).click();
 
-        await expect(page.getByText('LEADERBOARD')).toBeVisible();
+        await expect(page.getByRole('heading', { name: /^leaderboard$/i })).toBeVisible();
         await expect(page.getByText(displayedTrainerName, { exact: true })).toBeVisible();
         await expect(page.getByText(trainerNamewithSpecialChars, { exact: true })).toHaveCount(0);
       }
@@ -293,7 +286,8 @@ test.describe("@live Who's That Pokemon", () => {
       await page.getByRole('button', { name: /^kanto/i }).click();
       await startGame(page);
 
-      await expect(page.getByText(/KANTO POKEMON/i)).toBeVisible();
+      await page.getByRole('button', { name: /^hint 1$/i }).click();
+      await expect(page.getByLabel('Revealed hints')).toContainText(/^Region: Kanto$/i);
       await expect(page.getByText('Score')).toBeVisible();
       await expect(page.getByText('Rounds')).toBeVisible();
     });
@@ -303,9 +297,10 @@ test.describe("@live Who's That Pokemon", () => {
       await page.getByRole('button', { name: /^random region/i }).click();
       await startGame(page);
 
-      await expect(
-        page.getByText(/^(KANTO|HOENN|JOHTO|SINNOH|UNOVA|KALOS|ALOLA|GALAR|PALDEA) POKEMON$/i)
-      ).toBeVisible();
+      await page.getByRole('button', { name: /^hint 1$/i }).click();
+      await expect(page.getByLabel('Revealed hints')).toContainText(
+        /^Region: (Kanto|Hoenn|Johto|Sinnoh|Unova|Kalos|Alola|Galar|Paldea)$/i
+      );
       await expect(page.getByPlaceholder('Pokemon name...')).toBeVisible();
       await expect(page.getByRole('button', { name: /^guess$/i })).toBeEnabled();
     });
@@ -315,43 +310,43 @@ test.describe("@live Who's That Pokemon", () => {
       const regionCases = [
         {
           buttonName: /^kanto\s+firered\s*\/\s*leafgreen$/i,
-          challengeName: /KANTO POKEMON/i
+          regionName: 'Kanto'
         },
         {
           buttonName: /^hoenn\s+ruby\s*\/\s*sapphire\s*\/\s*emerald$/i,
-          challengeName: /HOENN POKEMON/i
+          regionName: 'Hoenn'
         },
         {
           buttonName: /^johto\s+heartgold\s*\/\s*soulsilver$/i,
-          challengeName: /JOHTO POKEMON/i
+          regionName: 'Johto'
         },
         {
           buttonName: /^sinnoh\s+diamond\s*\/\s*pearl\s*\/\s*platinum$/i,
-          challengeName: /SINNOH POKEMON/i
+          regionName: 'Sinnoh'
         },
         {
           buttonName: /^unova\s+black 2\s*\/\s*white 2$/i,
-          challengeName: /UNOVA POKEMON/i
+          regionName: 'Unova'
         },
         {
           buttonName: /^kalos\s+x\s*\/\s*y$/i,
-          challengeName: /KALOS POKEMON/i
+          regionName: 'Kalos'
         },
         {
           buttonName: /^hoenn\s+omega ruby\s*\/\s*alpha sapphire$/i,
-          challengeName: /HOENN POKEMON/i
+          regionName: 'Hoenn'
         },
         {
           buttonName: /^alola\s+sun\s*\/\s*moon$/i,
-          challengeName: /ALOLA POKEMON/i
+          regionName: 'Alola'
         },
         {
           buttonName: /^galar\s+sword\s*\/\s*shield$/i,
-          challengeName: /GALAR POKEMON/i
+          regionName: 'Galar'
         },
         {
           buttonName: /^paldea\s+scarlet\s*\/\s*violet$/i,
-          challengeName: /PALDEA POKEMON/i
+          regionName: 'Paldea'
         }
       ];
 
@@ -360,7 +355,10 @@ test.describe("@live Who's That Pokemon", () => {
         await page.getByRole('button', { name: regionCase.buttonName }).click();
         await startGame(page);
 
-        await expect(page.getByText(regionCase.challengeName)).toBeVisible();
+        await page.getByRole('button', { name: /^hint 1$/i }).click();
+        await expect(page.getByLabel('Revealed hints')).toContainText(
+          new RegExp(`^Region: ${regionCase.regionName}$`, 'i')
+        );
         await expect(page.getByPlaceholder('Pokemon name...')).toBeVisible();
       }
     });
@@ -373,8 +371,8 @@ test.describe("@live Who's That Pokemon", () => {
         await page.getByRole('button', { name: /^paldea\s+scarlet\s*\/\s*violet$/i }).click();
         await startGame(page);
 
-        await expect(page.getByText(/PALDEA POKEMON/i)).toBeVisible();
-        await expect(page.getByText(/KANTO POKEMON/i)).toBeHidden();
+        await page.getByRole('button', { name: /^hint 1$/i }).click();
+        await expect(page.getByLabel('Revealed hints')).toContainText(/^Region: Paldea$/i);
       }
     );
   });
@@ -388,7 +386,7 @@ test.describe("@live Who's That Pokemon", () => {
       await expect(page.getByText('Rounds')).toBeVisible();
       await expect(page.getByText('0')).toHaveCount(2);
       await expect(page.getByPlaceholder('Pokemon name...')).toBeVisible();
-      await expect(page.getByRole('button', { name: /^help$/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /^hint 1$/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /^guess$/i })).toBeVisible();
     });
 
@@ -400,13 +398,13 @@ test.describe("@live Who's That Pokemon", () => {
       await expect(page.getByText('0')).toHaveCount(2);
       await expect(page.getByLabel('Current score')).toContainText('0');
       await expect(page.getByPlaceholder('Pokemon name...')).toBeVisible();
-      await expect(page.getByRole('button', { name: /^help$/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /^hint 1$/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /^guess$/i })).toBeVisible();
       await page.getByRole('searchbox', { name: 'Pokemon name...' }).fill('Test');
       await page.getByRole('button', { name: 'Guess' }).click();
       await page.getByRole('button', { name: 'Next Pokemon' }).click();
       await expect(page.getByPlaceholder('Pokemon name...')).toBeVisible();
-      await expect(page.getByRole('button', { name: /^help$/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /^hint 1$/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /^guess$/i })).toBeVisible();
 
       await expect(page.getByLabel('Current score')).toContainText('1');
@@ -453,6 +451,12 @@ test.describe("@live Who's That Pokemon", () => {
     );
     // Verifies the scenario: Pokemon silhouette becomes inspectable after reveal.
     whosThatPokemonTest('Pokemon silhouette becomes inspectable after reveal', async ({ page }) => {
+      await page.route('https://images.pokemontcg.io/**', (route) => route.abort());
+      await page.route('https://images.scrydex.com/**', (route) => route.abort());
+      await page.getByRole('button', { name: /^kanto\s+firered\s*\/\s*leafgreen$/i }).click();
+      await page.evaluate(() => {
+        Math.random = () => 0;
+      });
       await startGame(page);
 
       const hiddenSilhouette = page.getByRole('button', {
@@ -488,6 +492,22 @@ test.describe("@live Who's That Pokemon", () => {
       await expect(
         pokedexEntryDialog.getByRole('heading', { name: /featured tcg cards/i })
       ).toBeVisible();
+      const unavailableCardEntries = pokedexEntryDialog.locator('[data-card-art-entry]');
+      await expect.poll(() => unavailableCardEntries.count()).toBeGreaterThan(0);
+      await expect(pokedexEntryDialog.locator('[data-card-art-entry]:visible')).toHaveCount(0, {
+        timeout: 30_000
+      });
+      await expect(unavailableCardEntries.first()).toHaveCSS('display', 'none');
+      await expect(pokedexEntryDialog.locator('img[src*="card-back"]')).toHaveCount(0);
+
+      await pokedexEntryDialog.getByRole('button', { name: /back/i }).click();
+      await expect(pokedexEntryDialog).toBeHidden();
+      await revealedSilhouette.click();
+
+      const reopenedEntryDialog = page.getByRole('dialog');
+      await expect(reopenedEntryDialog).toBeVisible();
+      await expect(reopenedEntryDialog.locator('[data-card-art-entry]:visible')).toHaveCount(0);
+      await expect(reopenedEntryDialog.locator('img[src*="card-back"]')).toHaveCount(0);
     });
   });
 
@@ -582,59 +602,112 @@ test.describe("@live Who's That Pokemon", () => {
     );
   });
 
-  test.describe('Help / Hints', () => {
-    // Verifies Help reveals selectable answer choices for the active round.
-    whosThatPokemonTest('Help shows multiple answer choices', async ({ page }) => {
-      await startGame(page);
-
-      await page.getByRole('button', { name: /^help$/i }).click();
-
-      await expect
-        .poll(() => helpChoiceLabels(page))
-        .toEqual(expect.arrayContaining([expect.any(String)]));
-      expect((await helpChoiceLabels(page)).length).toBeGreaterThan(0);
-    });
-
-    // Verifies the scenario: Selecting a help choice submits or fills the guess consistently.
+  test.describe('Difficulty / Hints', () => {
     whosThatPokemonTest(
-      'Selecting a help choice submits or fills the guess consistently',
+      'Easy mode shows answer choices and awards a full point',
       async ({ page }) => {
+        await difficultySelect(page).selectOption('easy');
         await startGame(page);
 
-        for (let i = 1; i <= 3; i++) {
-          const correctGuess = await currentMysteryPokemonName(page);
-          await page.getByRole('button', { name: /^help$/i }).click();
-          await page.getByRole('button', { name: correctGuess }).click();
-          await expectScoreAndRounds(page, i, i);
+        const choices = page.getByLabel('Pokemon name choices').getByRole('button');
+        await expect(choices).toHaveCount(4);
+        await expect(page.getByRole('button', { name: /^choices shown$/i })).toBeDisabled();
+        const correctGuess = await currentMysteryPokemonName(page);
+        await page
+          .getByLabel('Pokemon name choices')
+          .getByRole('button', { name: correctGuess })
+          .click();
 
-          await expect(page.locator('form')).toContainText(
-            'Correct! Click the Pokemon to open its entry.'
-          );
-          if (i < 3) {
-            await page.getByRole('button', { name: 'Next Pokemon' }).click();
-          }
-        }
+        await expectScoreAndRounds(page, 1, 1);
       }
     );
-    // Verifies the scenario: Help shows valid selectable choices.
-    whosThatPokemonTest('Help shows valid selectable choices', async ({ page }) => {
-      await startGame(page);
-      await page.getByRole('button', { name: /^help$/i }).click();
 
-      const choiceLabels = await helpChoiceLabels(page);
+    whosThatPokemonTest(
+      'Normal hints reveal Region, Type, and a masked Pokedex clue in order',
+      async ({ page }) => {
+        await startGame(page);
+        const hints = page.getByLabel('Revealed hints');
 
-      expect(choiceLabels.length).toBeGreaterThan(0);
-      for (const choiceLabel of choiceLabels) {
-        expect(choiceLabel).toMatch(/[A-Za-z]/);
-        await expect(page.getByRole('button', { name: choiceLabel })).toBeEnabled();
+        await page.getByRole('button', { name: /^hint 1$/i }).click();
+        await expect(hints.locator('li')).toHaveCount(1);
+        await expect(hints.locator('li').nth(0)).toContainText(/^Region:/i);
+
+        await page.getByRole('button', { name: /^hint 2$/i }).click();
+        await expect(hints.locator('li')).toHaveCount(2);
+        await expect(hints.locator('li').nth(1)).toContainText(/^Type:/i);
+
+        await page.getByRole('button', { name: /^hint 3$/i }).click();
+        await expect(hints.locator('li')).toHaveCount(3, { timeout: 30_000 });
+        await expect(hints.locator('li').nth(2)).toContainText(/^Pokedex clue:/i);
+        await expect(hints.locator('li').nth(2)).not.toContainText(
+          new RegExp(await currentMysteryPokemonName(page), 'i')
+        );
+        await expect(page.getByRole('button', { name: /^all hints used$/i })).toBeDisabled();
+
+        await answerCurrentRoundCorrectly(page);
+        await expectScoreAndRounds(page, 0.25, 1);
       }
+    );
+
+    whosThatPokemonTest(
+      'Each Normal hint reduces the available score by 0.25',
+      async ({ page }) => {
+        await startGame(page);
+        await page.getByRole('button', { name: /^hint 1$/i }).click();
+        await answerCurrentRoundCorrectly(page);
+
+        await expectScoreAndRounds(page, 0.75, 1);
+      }
+    );
+
+    whosThatPokemonTest('Hard mode exposes no hints or answer choices', async ({ page }) => {
+      await difficultySelect(page).selectOption('hard');
+      await startGame(page);
+
+      await expect(page.getByRole('button', { name: /^no hints$/i })).toBeDisabled();
+      await expect(page.getByLabel('Pokemon name choices')).toHaveCount(0);
+      await expect(page.getByLabel('Revealed hints')).toHaveCount(0);
+      await expect(page.getByPlaceholder('Pokemon name...')).toBeEnabled();
     });
+  });
+
+  test.describe('Session Length', () => {
+    whosThatPokemonTest(
+      'Ten-round sessions stop with a summary while Endless can continue',
+      async ({ page }) => {
+        await sessionSelect(page).selectOption('10');
+        await startGame(page);
+
+        for (let round = 1; round <= 10; round += 1) {
+          await page.getByPlaceholder('Pokemon name...').fill('notapokemon');
+          await page.getByRole('button', { name: /^guess$/i }).click();
+          await expectScoreAndRounds(page, 0, round);
+          if (round < 10) {
+            await page.getByRole('button', { name: /^next pokemon$/i }).click();
+            await expect(page.getByPlaceholder('Pokemon name...')).toBeVisible({ timeout: 30_000 });
+          }
+        }
+
+        await expect(page.getByRole('heading', { name: /^session complete$/i })).toBeVisible();
+        await expect(page.getByText(/0 points from 10 rounds/i)).toBeVisible();
+        await expect(page.getByRole('button', { name: /^next pokemon$/i })).toHaveCount(0);
+
+        await page.getByRole('button', { name: /^change settings$/i }).click();
+        await sessionSelect(page).selectOption('endless');
+        await startGame(page);
+        await page.getByPlaceholder('Pokemon name...').fill('notapokemon');
+        await page.getByRole('button', { name: /^guess$/i }).click();
+
+        await expect(page.getByRole('button', { name: /^next pokemon$/i })).toBeVisible();
+        await expect(page.getByRole('heading', { name: /^session complete$/i })).toHaveCount(0);
+      }
+    );
   });
 
   test.describe('Leaderboard', () => {
     // Verifies an empty leaderboard starts in a readable resettable state.
     whosThatPokemonLeaderboardTest('Empty leaderboard is shown on first load', async ({ page }) => {
-      await expect(page.getByText('LEADERBOARD')).toBeVisible();
+      await expect(page.getByRole('heading', { name: /^leaderboard$/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /^reset$/i })).toBeVisible();
       await expect(page.getByText('No scores yet.')).toBeVisible();
     });
@@ -797,34 +870,37 @@ test.describe("@live Who's That Pokemon", () => {
       }
     );
 
-    // Verifies a browser reload returns to the app's station chooser instead of a partial game.
-    whosThatPokemonTest('Browser reload returns to the station chooser', async ({ page }) => {
-      await startGame(page);
+    // Verifies a browser reload keeps the routed station but does not restore a partial round.
+    whosThatPokemonTest(
+      'Browser reload restores the station setup without the active round',
+      async ({ page }) => {
+        await startGame(page);
 
-      await page.reload();
+        await page.reload();
 
-      await expect(page.getByText(/choose (?:your|a) station/i)).toBeVisible();
-      await expect(page.getByRole('button', { name: /pokemon tcg simulator/i })).toBeVisible();
-      await expect(
-        page.getByRole('button', { name: /search pokemon by name or number/i })
-      ).toBeVisible();
-      await expect(page.getByRole('button', { name: /who's that pokemon/i })).toBeVisible();
-    });
+        await expect(page).toHaveURL(/#\/who$/);
+        await expect(page.getByText('TRAINER SETUP')).toBeVisible();
+        await expect(page.getByRole('button', { name: /^start game$/i })).toBeVisible();
+        await expect(page.getByPlaceholder('Pokemon name...')).toHaveCount(0);
+      }
+    );
   });
 
   test.describe('Edge / Reliability', () => {
-    // Verifies repeated Help clicks leave the current round usable and avoid duplicate choice spam.
-    whosThatPokemonTest('Rapid Help clicks leave one usable set of choices', async ({ page }) => {
+    // Verifies repeated hint attempts never expose more than the three staged hints.
+    whosThatPokemonTest('Rapid hint requests stop at the three staged hints', async ({ page }) => {
       await startGame(page);
 
       for (let clickCount = 0; clickCount < 3; clickCount += 1) {
-        await page.getByRole('button', { name: /^help$/i }).click();
+        await page
+          .getByRole('button', { name: new RegExp(`^hint ${clickCount + 1}$`, 'i') })
+          .click();
       }
 
-      const choiceLabels = await helpChoiceLabels(page);
-
-      expect(choiceLabels.length).toBeGreaterThan(0);
-      expect(new Set(choiceLabels).size).toBe(choiceLabels.length);
+      await expect(page.getByLabel('Revealed hints').locator('li')).toHaveCount(3, {
+        timeout: 30_000
+      });
+      await expect(page.getByRole('button', { name: /^all hints used$/i })).toBeDisabled();
       await expect(page.getByPlaceholder('Pokemon name...')).toBeVisible();
       await expect(page.getByRole('button', { name: /^guess$/i })).toBeEnabled();
     });
@@ -854,7 +930,7 @@ test.describe("@live Who's That Pokemon", () => {
       await startGame(page);
 
       await expect(page.getByPlaceholder('Pokemon name...')).toBeVisible();
-      await expect(page.getByRole('button', { name: /^help$/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /^hint 1$/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /^guess$/i })).toBeEnabled();
     });
 
@@ -875,7 +951,7 @@ test.describe("@live Who's That Pokemon", () => {
       await expect(page.getByText('TRAINER SETUP')).toBeVisible();
       await expect(page.getByRole('textbox')).toBeEnabled();
       await expect(page.getByRole('button', { name: /^start game$/i })).toBeEnabled();
-      await expect(page.getByText('LEADERBOARD')).toBeVisible();
+      await expect(page.getByRole('heading', { name: /^leaderboard$/i })).toBeVisible();
 
       releasePokemonRequests();
     });
@@ -893,7 +969,7 @@ test.describe("@live Who's That Pokemon", () => {
       await page.getByRole('button', { name: /who's that pokemon/i }).click();
 
       await expect(page.getByText('TRAINER SETUP')).toBeVisible();
-      await expect(page.getByText('LEADERBOARD')).toBeVisible();
+      await expect(page.getByRole('heading', { name: /^leaderboard$/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /^reset$/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /^start game$/i })).toBeEnabled();
 

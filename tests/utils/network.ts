@@ -5,7 +5,7 @@ const pagesWithPokeApiRetries = new WeakSet<Page>();
 function isRouteLifecycleError(page: Page, error: unknown): boolean {
   return (
     page.isClosed() ||
-    /route is already handled|target page.*closed|browser has been closed|request context disposed|test ended/i.test(
+    /route is already handled|target page.*closed|browser has been closed|request context disposed|fetch response has been disposed|test ended/i.test(
       String(error)
     )
   );

@@ -5,12 +5,15 @@ test.describe('@live TrainerDex', () => {
   // Opens TrainerDex from the home station chooser and waits for the initial Kanto trainer list.
   async function openTrainerDex(page: Page) {
     await page.goto('/');
+    await page.evaluate(() => localStorage.removeItem('pokemon-lab-trainerdex-view-v1'));
     await page.getByRole('button', { name: /trainerdex/i }).click();
 
     await expect(page.getByRole('heading', { name: /^trainerdex$/i })).toBeVisible();
     await expect(page.getByText('GAME / REGION')).toBeVisible();
     await expect(searchInput(page)).toBeVisible();
     await expect(trainerButton(page, 'Brock')).toBeVisible({ timeout: 30_000 });
+    await gameVersionButton(page, 'FIRERED LEAFGREEN').click();
+    await expect(gameVersionButton(page, 'FIRERED LEAFGREEN')).toHaveClass(/is-selected/);
   }
 
   const trainerDexTest = test.extend<{ openTrainerDexStation: void }>({
@@ -105,6 +108,38 @@ test.describe('@live TrainerDex', () => {
       await expect(teamPokemonButton(page, 'Onix')).toBeVisible();
     });
 
+    test('Direct trainer route opens the intended trainer and survives reload', async ({
+      page
+    }) => {
+      await page.goto('/#/trainerdex?trainer=misty-kanto&game=firered-leafgreen&stage=initial');
+
+      await expect(page.getByRole('heading', { name: /^trainerdex$/i })).toBeVisible();
+      await expect(trainerDetailHeading(page, 'Misty')).toBeVisible({ timeout: 30_000 });
+      await expect(trainerDetailText(page, 'Cerulean City Gym Leader')).toBeVisible();
+      await expect(page).toHaveURL(
+        /#\/trainerdex\?trainer=misty-kanto&game=firered-leafgreen&stage=initial$/
+      );
+
+      await page.reload();
+
+      await expect(trainerDetailHeading(page, 'Misty')).toBeVisible({ timeout: 30_000 });
+      await expect(teamPokemonButton(page, 'Starmie')).toBeVisible();
+    });
+
+    test('Invalid routed game and stage fall back to valid trainer defaults', async ({ page }) => {
+      await page.goto(
+        '/#/trainerdex?trainer=brock-kanto&game=unavailable-game&stage=unavailable-stage'
+      );
+
+      await expect(page.getByRole('heading', { name: /^trainerdex$/i })).toBeVisible();
+      await expect(trainerDetailHeading(page, 'Brock')).toBeVisible({ timeout: 30_000 });
+      await expect(gameVersionButton(page, 'HEARTGOLD SOULSILVER')).toHaveClass(/is-selected/);
+      await expect(teamPokemonButton(page, 'Onix')).toBeVisible();
+      await expect(page).toHaveURL(
+        /#\/trainerdex\?trainer=brock-kanto&game=heartgold-soulsilver&stage=initial$/
+      );
+    });
+
     // Verifies the station menu can return to the home station chooser.
     trainerDexTest('Menu returns from TrainerDex to the home station chooser', async ({ page }) => {
       await page.getByRole('button', { name: /^menu$/i }).click();
@@ -128,6 +163,7 @@ test.describe('@live TrainerDex', () => {
 
       await page.setViewportSize({ width: 390, height: 844 });
 
+      await page.getByRole('button', { name: /^show trainer filters$/i }).click();
       await expect(searchInput(page)).toBeVisible();
       await expect(regionButton(page, 'Kanto')).toBeVisible();
       await expect(trainerButton(page, 'Brock')).toBeVisible();
@@ -138,7 +174,7 @@ test.describe('@live TrainerDex', () => {
       );
       await expect(page.locator('.trainerdex-region-grid')).toHaveCSS('grid-auto-flow', 'column');
       await expect(page.locator('.trainerdex-region-grid')).toHaveCSS('overflow-x', 'auto');
-      await expect(page.locator('.trainerdex-hero')).toHaveCSS('display', 'flex');
+      await expect(page.locator('.trainerdex-hero')).toHaveCSS('display', 'grid');
       expect(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
@@ -304,7 +340,7 @@ test.describe('@live TrainerDex', () => {
       }
     );
 
-    // Verifies a recorded rematch stage refreshes the selected trainer's team and analysis.
+    // Verifies a recorded rematch stage refreshes the selected trainer's team overview.
     trainerDexTest('Battle stage switch updates a trainer rematch team', async ({ page }) => {
       await page
         .getByRole('main')
@@ -320,7 +356,7 @@ test.describe('@live TrainerDex', () => {
       await battleStages.getByRole('button', { name: /^fighting dojo rematch$/i }).click();
       await expect(teamPokemonButton(page, 'Golem')).toBeVisible();
       await expect(teamPokemonButton(page, 'Rampardos')).toBeVisible();
-      await expect(page.getByRole('region', { name: /trainer analysis/i })).toBeVisible();
+      await expect(page.getByRole('region', { name: /trainer team overview/i })).toBeVisible();
     });
 
     // Verifies search can intentionally find trainers outside the currently selected region.
@@ -338,6 +374,47 @@ test.describe('@live TrainerDex', () => {
   });
 
   test.describe('Trainer Details', () => {
+    trainerDexTest(
+      'Previous and Next browse adjacent trainers and respect boundaries',
+      async ({ page }) => {
+        const navigation = page.getByLabel('Browse adjacent trainers');
+        const previous = navigation.getByRole('button', { name: /previous/i });
+        const nextMisty = navigation.getByRole('button', { name: /misty/i });
+
+        await expect(previous).toBeDisabled();
+        await nextMisty.click();
+        await expect(trainerDetailHeading(page, 'Misty')).toBeVisible();
+        await expect(page).toHaveURL(
+          /#\/trainerdex\?trainer=misty-kanto&game=firered-leafgreen&stage=initial$/
+        );
+        await expect(navigation.getByRole('button', { name: /brock/i })).toBeEnabled();
+
+        await navigation.getByRole('button', { name: /brock/i }).click();
+        await expect(trainerDetailHeading(page, 'Brock')).toBeVisible();
+        await expect(previous).toBeDisabled();
+      }
+    );
+
+    trainerDexTest('Selected game and battle stage are restored after reload', async ({ page }) => {
+      await gameVersionButton(page, 'HEARTGOLD SOULSILVER').click();
+      const battleStages = page.getByLabel('Pokemon team battle stage');
+      await battleStages.getByRole('button', { name: /^fighting dojo rematch$/i }).click();
+      await expect(teamPokemonButton(page, 'Rampardos')).toBeVisible();
+      await expect(page).toHaveURL(
+        /#\/trainerdex\?trainer=brock-kanto&game=heartgold-soulsilver&stage=rematch$/
+      );
+
+      await page.reload();
+
+      await expect(gameVersionButton(page, 'HEARTGOLD SOULSILVER')).toHaveClass(/is-selected/);
+      await expect(
+        page
+          .getByLabel('Pokemon team battle stage')
+          .getByRole('button', { name: /^fighting dojo rematch$/i })
+      ).toHaveClass(/is-selected/);
+      await expect(teamPokemonButton(page, 'Rampardos')).toBeVisible();
+    });
+
     // Verifies selecting another trainer updates role, stats, team, and TCG panels.
     trainerDexTest('Selecting a trainer opens the correct detail view', async ({ page }) => {
       await trainerButton(page, 'Misty').click();
@@ -426,9 +503,12 @@ test.describe('@live TrainerDex', () => {
       }
     );
 
-    // Verifies broken external image assets do not block TrainerDex navigation or selection.
-    test('Image request failures leave TrainerDex controls usable', async ({ page }) => {
-      await page.route('**/*.{png,jpg,jpeg,gif,webp,svg}', (route) => route.abort());
+    // Verifies failed card fronts are removed instead of being replaced by card backs.
+    test('Failed card artwork is removed while TrainerDex controls remain usable', async ({
+      page
+    }) => {
+      await page.route('https://images.pokemontcg.io/**', (route) => route.abort());
+      await page.route('https://images.scrydex.com/**', (route) => route.abort());
 
       await openTrainerDex(page);
 
@@ -437,9 +517,15 @@ test.describe('@live TrainerDex', () => {
       await trainerButton(page, 'Misty').click();
       await expect(trainerDetailHeading(page, 'Misty')).toBeVisible();
       await expect(teamPokemonButton(page, 'Starmie')).toBeVisible();
+      await page.locator('.trainerdex-tcg-section').scrollIntoViewIfNeeded();
+      await expect(
+        page.getByText('No local trainer-featured TCG cards found for this trainer.')
+      ).toBeVisible({ timeout: 30_000 });
+      await expect(page.locator('.trainerdex-tcg-section .binder-card:visible')).toHaveCount(0);
+      await expect(page.locator('.trainerdex-tcg-section .card-back-image')).toHaveCount(0);
     });
 
-    // Verifies delayed Pokemon API data leaves the station shell usable before analysis loads.
+    // Verifies delayed Pokemon API data leaves the station shell usable before the team loads.
     test('Delayed Pokemon data keeps TrainerDex shell stable', async ({ page }) => {
       let releasePokemonRequests!: () => void;
       const pokemonRequestsCanContinue = new Promise<void>((resolve) => {
@@ -469,11 +555,17 @@ test.describe('@live TrainerDex', () => {
       await expect(page.getByRole('heading', { name: /^trainerdex$/i })).toBeVisible();
       await expect(searchInput(page)).toBeVisible();
       await expect(trainerButton(page, 'Brock')).toBeVisible();
-      await expect(page.getByText('Loading team analysis...')).toBeVisible();
+      const loadingTeamStatus = page.getByText('Loading Pokemon team...');
+      const recommendedTypesPlaceholder = page.getByText(
+        'Recommended types load with the Pokemon team.'
+      );
+      await expect(loadingTeamStatus).toBeVisible();
+      await expect(recommendedTypesPlaceholder).toBeVisible();
 
       releasePokemonRequests();
 
-      await expect(page.getByText('Loading team analysis...')).toBeHidden({ timeout: 30_000 });
+      await expect(loadingTeamStatus).toBeHidden({ timeout: 30_000 });
+      await expect(recommendedTypesPlaceholder).toBeHidden();
       await expect(page.getByText('AVERAGE STATS')).toBeVisible();
       await expect(teamPokemonButton(page, 'Onix')).toBeVisible();
     });
