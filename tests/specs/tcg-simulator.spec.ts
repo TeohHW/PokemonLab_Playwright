@@ -541,8 +541,7 @@ test.describe('Pokemon TCG Simulator', () => {
             .poll(() =>
               page.evaluate(
                 () =>
-                  document.documentElement.scrollWidth <=
-                  document.documentElement.clientWidth + 1
+                  document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
               )
             )
             .toBe(true);
