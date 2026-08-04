@@ -460,11 +460,6 @@ test.describe('Pokemon TCG Simulator', () => {
       tcgTest(
         'Adapts set browsing and controls across web and mobile viewports',
         async ({ browserName, page }) => {
-          test.skip(
-            browserName === 'webkit',
-            'WebKit does not reliably settle the combined desktop-to-mobile layout transitions.'
-          );
-
           const setBrowser = page.locator('.tcg-set-browser-disclosure');
           const setBrowserContent = page.locator('.tcg-set-browser-content');
           const setCards = page.getByLabel('Expansion sets').getByRole('button');
@@ -472,6 +467,10 @@ test.describe('Pokemon TCG Simulator', () => {
           const actions = page.locator('.tcg-selected-set-actions');
 
           await page.setViewportSize({ width: 1024, height: 900 });
+          if (browserName === 'webkit') {
+            await page.reload({ waitUntil: 'domcontentloaded' });
+            await expect(openOnePackButton(page)).toBeEnabled({ timeout: 30_000 });
+          }
 
           await expect(page.locator('.tcg-page')).toBeVisible();
           await expect(page.locator('.series-filter')).toHaveCSS('flex-wrap', 'nowrap');
@@ -503,6 +502,10 @@ test.describe('Pokemon TCG Simulator', () => {
           await expect(pagination).toContainText('Page 1 /');
 
           await page.setViewportSize({ width: 390, height: 844 });
+          if (browserName === 'webkit') {
+            await page.reload({ waitUntil: 'domcontentloaded' });
+            await expect(openOnePackButton(page)).toBeEnabled({ timeout: 30_000 });
+          }
 
           await expect(openOnePackButton(page)).toBeVisible();
           await expect(page.locator('.set-grid')).toHaveCSS('grid-auto-flow', 'column');
