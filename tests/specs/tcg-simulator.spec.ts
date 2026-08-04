@@ -507,26 +507,28 @@ test.describe('Pokemon TCG Simulator', () => {
             /\d+(?:\.\d+)?px \d+(?:\.\d+)?px/
           );
           await expect(actions).toHaveCSS('position', 'fixed');
-          const mobileMetrics = await page.locator('.tcg-page').evaluate((tcgPage) => {
-            const actionBar = tcgPage.querySelector('.tcg-selected-set-actions');
-            if (!(actionBar instanceof HTMLElement)) {
-              throw new Error('Expected the mobile TCG action bar');
-            }
+          await expect
+            .poll(() =>
+              page.locator('.tcg-page').evaluate((tcgPage) => {
+                const actionBar = tcgPage.querySelector('.tcg-selected-set-actions');
+                if (!(actionBar instanceof HTMLElement)) {
+                  throw new Error('Expected the mobile TCG action bar');
+                }
 
-            const actionRect = actionBar.getBoundingClientRect();
-            return {
-              actionBarBottom: actionRect.bottom,
-              actionBarHeight: actionRect.height,
-              pagePaddingBottom: Number.parseFloat(getComputedStyle(tcgPage).paddingBottom),
-              viewportHeight: window.innerHeight
-            };
-          });
-          expect(mobileMetrics.actionBarBottom).toBeLessThanOrEqual(
-            mobileMetrics.viewportHeight + 1
-          );
-          expect(mobileMetrics.pagePaddingBottom).toBeGreaterThanOrEqual(
-            mobileMetrics.actionBarHeight
-          );
+                const actionRect = actionBar.getBoundingClientRect();
+                const pagePaddingBottom = Number.parseFloat(
+                  getComputedStyle(tcgPage).paddingBottom
+                );
+                return {
+                  actionBarInsideViewport: actionRect.bottom <= window.innerHeight + 1,
+                  pageClearsActionBar: pagePaddingBottom >= actionRect.height
+                };
+              })
+            )
+            .toEqual({
+              actionBarInsideViewport: true,
+              pageClearsActionBar: true
+            });
 
           await openOnePackButton(page).click();
           const dialog = packDialog(page);
@@ -534,11 +536,16 @@ test.describe('Pokemon TCG Simulator', () => {
           await dialog.getByRole('button', { name: /^skip animation$/i }).click();
           await expectRevealedPackCards(page, 10);
           await dialog.getByRole('button', { name: /^close$/i }).click();
-          expect(
-            await page.evaluate(
-              () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
+          await expect(dialog).toBeHidden();
+          await expect
+            .poll(() =>
+              page.evaluate(
+                () =>
+                  document.documentElement.scrollWidth <=
+                  document.documentElement.clientWidth + 1
+              )
             )
-          ).toBeTruthy();
+            .toBe(true);
         }
       );
 
