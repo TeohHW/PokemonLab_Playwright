@@ -155,44 +155,51 @@ test.describe('Shared application continuity and accessibility', () => {
     ).toBeChecked();
   });
 
-  test('Station menu focuses the active station and traps keyboard focus', async ({
-    page,
-    browserName
-  }) => {
-    test.skip(
-      browserName === 'webkit',
-      'WebKit pointer activation does not reliably establish the station-menu opener as active focus.'
-    );
-
+  test('Station menu focuses its initial action and traps keyboard focus', async ({ page }) => {
     await openTcgRoute(page);
     const menuButton = page.getByRole('button', { name: /^menu$/i });
     await menuButton.click();
 
     const dialog = page.getByRole('dialog');
     const activeStationItem = dialog.getByRole('button', { name: /^tcg simulator/i });
-    const previousStationItem = dialog.getByRole('button', { name: /^pokedex$/i });
-    const firstVisibleItem = dialog.getByRole('button', { name: /^home$/i });
+    const pokedexItem = dialog.getByRole('button', { name: /^pokedex$/i });
+    const initialFocusItem = dialog.locator('[data-dialog-initial-focus="true"]');
+    const scrimCloseButton = page.locator('.station-menu-scrim');
     const focusableItems = dialog.locator(
       'button:visible:not(:disabled), a[href]:visible, input:visible:not(:disabled), [tabindex]:visible:not([tabindex="-1"])'
     );
+    const focusedModalItems = page.locator('.station-menu-scrim:focus, [role="dialog"] :focus');
+
+    await expect(initialFocusItem).toHaveAccessibleName(/^home$/i);
+    await expect(initialFocusItem).toBeFocused();
+    await expect(activeStationItem).toHaveClass(/is-active/);
+
+    await initialFocusItem.press('Tab');
+    await expect(pokedexItem).toBeFocused();
+
+    await pokedexItem.press('Tab');
     await expect(activeStationItem).toBeFocused();
 
     await activeStationItem.press('Shift+Tab');
-    await expect(previousStationItem).toBeFocused();
+    await expect(pokedexItem).toBeFocused();
 
-    await previousStationItem.press('Shift+Tab');
-    await expect(firstVisibleItem).toBeFocused();
+    await pokedexItem.press('Shift+Tab');
+    await expect(initialFocusItem).toBeFocused();
 
-    await firstVisibleItem.press('Shift+Tab');
-    await expect(focusableItems.last()).toBeFocused();
+    await initialFocusItem.press('Shift+Tab');
+    await expect(scrimCloseButton).toBeFocused();
 
+    await scrimCloseButton.press('Tab');
+    await expect(initialFocusItem).toBeFocused();
+
+    await focusableItems.last().focus();
     await focusableItems.last().press('Tab');
-    await expect(firstVisibleItem).toBeFocused();
+    await expect(focusedModalItems).toHaveCount(1);
 
     await menuButton.focus();
     await expect(menuButton).toBeFocused();
     await page.keyboard.press('Tab');
-    await expect(activeStationItem).toBeFocused();
+    await expect(initialFocusItem).toBeFocused();
   });
 
   test('Station menu selection closes the dialog and performs navigation', async ({ page }) => {

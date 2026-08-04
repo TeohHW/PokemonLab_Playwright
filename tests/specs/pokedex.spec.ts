@@ -308,15 +308,33 @@ test.describe('@live Pokemon Pokedex', () => {
       }
     );
 
-    // Verifies the scenario: Adapts Pokedex browsing across web and mobile viewports.
+    // Verifies desktop details become sticky, isolated mobile sections without losing content.
     test('Adapts Pokedex browsing across web and mobile viewports', async ({ page }) => {
+      const detailTabs = page.getByRole('navigation', { name: 'Pokemon detail sections' });
+      const overviewTab = detailTabs.getByRole('button', { name: 'Overview', exact: true });
+      const formsTab = detailTabs.getByRole('button', { name: 'Forms', exact: true });
+      const movesTab = detailTabs.getByRole('button', { name: 'Moves', exact: true });
+      const cardsTab = detailTabs.getByRole('button', { name: 'Cards', exact: true });
+      const forms = page.locator('.alternate-forms-section');
+      const moves = page.locator('.moves-section');
+      const cards = page.locator('.tcg-featured-section');
+
       await page.setViewportSize({ width: 1024, height: 900 });
       await openPokedex(page);
+      await pokemonListButton(page, 1, 'Bulbasaur').click();
+      await expect(
+        pokemonDetailCard(page).getByRole('heading', { name: 'Bulbasaur' })
+      ).toBeVisible();
 
       await expect(page.locator('.pokedex-layout')).toHaveCSS(
         'grid-template-columns',
         /\d+(?:\.\d+)?px \d+(?:\.\d+)?px/
       );
+      await expect(detailTabs).toBeHidden();
+      await expect(pokemonDetailCard(page)).toBeVisible();
+      await expect(forms).toBeVisible();
+      await expect(moves).toBeVisible();
+      await expect(cards).toBeVisible();
 
       await page.setViewportSize({ width: 390, height: 844 });
 
@@ -333,11 +351,49 @@ test.describe('@live Pokemon Pokedex', () => {
         'grid-template-columns',
         /\d+(?:\.\d+)?px \d+(?:\.\d+)?px/
       );
+      await expect(detailTabs).toBeVisible();
+      await expect(detailTabs).toHaveCSS('position', 'sticky');
+      await expect(overviewTab).toHaveAttribute('aria-pressed', 'true');
+      await expect(pokemonDetailCard(page).locator('.pokedex-card-media')).toBeVisible();
+      await expect(forms).toBeHidden();
+      await expect(moves).toBeHidden();
+      await expect(cards).toBeHidden();
+
+      await formsTab.click();
+      await expect(formsTab).toHaveAttribute('aria-pressed', 'true');
+      await expect(pokemonDetailCard(page).locator('.pokedex-card-media')).toBeHidden();
+      await expect(forms).toBeVisible();
+      await expect(forms.getByText(/Generation Sprites/i)).toBeVisible();
+      await expect(moves).toBeHidden();
+      await expect(cards).toBeHidden();
+
+      await movesTab.click();
+      await expect(movesTab).toHaveAttribute('aria-pressed', 'true');
+      await expect(forms).toBeHidden();
+      await expect(moves).toBeVisible();
+      await expect(cards).toBeHidden();
+
+      await cardsTab.click();
+      await expect(cardsTab).toHaveAttribute('aria-pressed', 'true');
+      await expect(pokemonDetailCard(page)).toBeHidden();
+      await expect(cards).toBeVisible();
+
+      await page.getByPlaceholder('Name or number...').fill('Ivysaur');
+      await page.getByRole('button', { name: /^search$/i }).click();
+      await expect(overviewTab).toHaveAttribute('aria-pressed', 'true');
+      await expect(pokemonDetailCard(page).getByRole('heading', { name: 'Ivysaur' })).toBeVisible();
       expect(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
         )
       ).toBeTruthy();
+
+      await page.setViewportSize({ width: 1024, height: 900 });
+      await expect(detailTabs).toBeHidden();
+      await expect(pokemonDetailCard(page)).toBeVisible();
+      await expect(forms).toBeVisible();
+      await expect(moves).toBeVisible();
+      await expect(cards).toBeVisible();
     });
   });
 

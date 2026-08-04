@@ -280,8 +280,12 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(pokemonListButton(page, 1, 'Bulbasaur')).toBeVisible({ timeout: 30_000 });
     });
 
-    // Verifies the scenario: Adapts the planner workspace across web and mobile viewports.
+    // Verifies mobile slot selection shows one populated member while desktop retains all six slots.
     test('Adapts the planner workspace across web and mobile viewports', async ({ page }) => {
+      const mobileSlotSelector = page.getByRole('navigation', {
+        name: 'Choose a Pokemon team slot'
+      });
+
       await page.setViewportSize({ width: 1024, height: 900 });
       await openTeamPlanner(page);
 
@@ -289,6 +293,11 @@ test.describe('@live Pokemon Team Planner', () => {
         'grid-template-columns',
         /\d+(?:\.\d+)?px \d+(?:\.\d+)?px/
       );
+      await expect(mobileSlotSelector).toBeHidden();
+      await addPokemon(page, 1, 'Bulbasaur');
+      await addPokemon(page, 2, 'Ivysaur');
+      await expect(occupiedTeamCards(page)).toHaveCount(2);
+      await expect(page.locator('.team-slot-grid .team-member-card:visible')).toHaveCount(6);
 
       await page.setViewportSize({ width: 390, height: 844 });
 
@@ -308,17 +317,47 @@ test.describe('@live Pokemon Team Planner', () => {
       );
       await expect(page.locator('.team-slot-grid')).toHaveCSS(
         'grid-template-columns',
-        /\d+(?:\.\d+)?px \d+(?:\.\d+)?px \d+(?:\.\d+)?px/
+        /^\d+(?:\.\d+)?px$/
       );
       await expect(page.locator('.team-save-row')).toHaveCSS(
         'grid-template-columns',
         /^(?:\d+(?:\.\d+)?px|1fr)$/
       );
+
+      const slotButtons = mobileSlotSelector.getByRole('button');
+      const bulbasaurSlot = mobileSlotSelector.getByRole('button', {
+        name: 'Show slot 1: Bulbasaur'
+      });
+      const ivysaurSlot = mobileSlotSelector.getByRole('button', {
+        name: 'Show slot 2: Ivysaur'
+      });
+      await expect(mobileSlotSelector).toBeVisible();
+      await expect(mobileSlotSelector).toHaveCSS('position', 'sticky');
+      await expect(slotButtons).toHaveCount(2);
+      await expect(bulbasaurSlot).toHaveAttribute('aria-pressed', 'true');
+      await expect(teamCard(page, 'Bulbasaur')).toBeVisible();
+      await expect(teamCard(page, 'Ivysaur')).toBeHidden();
+      await expect(page.locator('.team-slot-grid .team-member-card:visible')).toHaveCount(1);
+      await expect(page.locator('.team-slot-grid .team-member-card.is-empty')).toHaveCount(4);
+      await expect(page.locator('.team-slot-grid .team-member-card.is-empty:visible')).toHaveCount(
+        0
+      );
+
+      await ivysaurSlot.click();
+      await expect(ivysaurSlot).toHaveAttribute('aria-pressed', 'true');
+      await expect(teamCard(page, 'Bulbasaur')).toBeHidden();
+      await expect(teamCard(page, 'Ivysaur')).toBeVisible();
       expect(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
         )
       ).toBeTruthy();
+
+      await page.setViewportSize({ width: 1024, height: 900 });
+      await expect(mobileSlotSelector).toBeHidden();
+      await expect(teamCard(page, 'Bulbasaur')).toBeVisible();
+      await expect(teamCard(page, 'Ivysaur')).toBeVisible();
+      await expect(page.locator('.team-slot-grid .team-member-card:visible')).toHaveCount(6);
     });
   });
 

@@ -290,6 +290,64 @@ test.describe('Pokemon TCG Simulator', () => {
     return page.getByRole('button', { name: /\b\d{4}\b/ });
   }
 
+  // Returns paged expansion results to their first page before a complete result scan.
+  async function returnToFirstExpansionPage(page: Page) {
+    const pagination = page.getByRole('navigation', { name: 'Expansion set pages' });
+    const previousButton = pagination.getByRole('button', { name: 'Prev', exact: true });
+
+    while (await previousButton.isEnabled()) {
+      await previousButton.click();
+    }
+
+    await expect(pagination).toContainText('Page 1 /');
+  }
+
+  // Finds an expansion even when the active search places it beyond the first eight results.
+  async function findExpansionSetAcrossPages(
+    page: Page,
+    setName: string,
+    seriesName: string,
+    releaseYear: number
+  ) {
+    const setButton = expansionSetButton(page, setName, seriesName, releaseYear);
+    const pagination = page.getByRole('navigation', { name: 'Expansion set pages' });
+    const nextButton = pagination.getByRole('button', { name: 'Next', exact: true });
+
+    await returnToFirstExpansionPage(page);
+
+    while (!(await setButton.isVisible())) {
+      if (!(await nextButton.isEnabled())) {
+        break;
+      }
+      await nextButton.click();
+    }
+
+    await expect(setButton).toBeVisible();
+    return setButton;
+  }
+
+  // Confirms a filtered-out expansion is absent from every page, not only the current page.
+  async function expectExpansionSetAbsentAcrossPages(
+    page: Page,
+    setName: string,
+    seriesName: string,
+    releaseYear: number
+  ) {
+    const setButton = expansionSetButton(page, setName, seriesName, releaseYear);
+    const pagination = page.getByRole('navigation', { name: 'Expansion set pages' });
+    const nextButton = pagination.getByRole('button', { name: 'Next', exact: true });
+
+    await returnToFirstExpansionPage(page);
+
+    while (true) {
+      await expect(setButton).toBeHidden();
+      if (!(await nextButton.isEnabled())) {
+        break;
+      }
+      await nextButton.click();
+    }
+  }
+
   // Locates a Special / Limited reference set by its user-facing set name.
   function referenceSetButton(page: Page, setName: string) {
     return page.getByLabel('Expansion sets').getByRole('button', {
@@ -398,15 +456,46 @@ test.describe('Pokemon TCG Simulator', () => {
         await expect(page.getByRole('heading', { name: /^binder$/i })).toBeVisible();
       });
 
-      // Verifies the scenario: Adapts set browsing and controls across web and mobile viewports.
+      // Verifies paged expansion browsing and pack controls remain usable in desktop and mobile layouts.
       tcgTest(
         'Adapts set browsing and controls across web and mobile viewports',
         async ({ page }) => {
+          const setBrowser = page.locator('.tcg-set-browser-disclosure');
+          const setBrowserContent = page.locator('.tcg-set-browser-content');
+          const setCards = page.getByLabel('Expansion sets').getByRole('button');
+          const pagination = page.getByRole('navigation', { name: 'Expansion set pages' });
+          const actions = page.locator('.tcg-selected-set-actions');
+
           await page.setViewportSize({ width: 1024, height: 900 });
 
           await expect(page.locator('.tcg-page')).toBeVisible();
           await expect(page.locator('.series-filter')).toHaveCSS('flex-wrap', 'nowrap');
           await expect(page.locator('.series-filter')).toHaveCSS('overflow-x', 'auto');
+          await expect(setBrowser).toHaveAttribute('open', '');
+          await expect(setCards).toHaveCount(8);
+          await expect(pagination).toContainText('Page 1 /');
+          await expect(
+            pagination.getByRole('button', { name: 'Prev', exact: true })
+          ).toBeDisabled();
+          await expect(pagination.getByRole('button', { name: 'Next', exact: true })).toBeEnabled();
+          await expect(actions).toHaveCSS('position', 'sticky');
+
+          await setBrowser.locator('summary').click();
+          await expect(setBrowser).not.toHaveAttribute('open', '');
+          await expect(setBrowserContent).toBeHidden();
+          await setBrowser.locator('summary').click();
+          await expect(setBrowserContent).toBeVisible();
+
+          const firstPageFirstSet = await setCards.first().innerText();
+          await pagination.getByRole('button', { name: 'Next', exact: true }).click();
+          await expect(pagination).toContainText('Page 2 /');
+          await expect(setCards).toHaveCount(8);
+          expect(await setCards.first().innerText()).not.toBe(firstPageFirstSet);
+          await page
+            .getByLabel('Filter by series')
+            .getByRole('button', { name: 'Base', exact: true })
+            .click();
+          await expect(pagination).toContainText('Page 1 /');
 
           await page.setViewportSize({ width: 390, height: 844 });
 
@@ -417,6 +506,34 @@ test.describe('Pokemon TCG Simulator', () => {
             'grid-template-columns',
             /\d+(?:\.\d+)?px \d+(?:\.\d+)?px/
           );
+          await expect(actions).toHaveCSS('position', 'fixed');
+          const mobileMetrics = await page.locator('.tcg-page').evaluate((tcgPage) => {
+            const actionBar = tcgPage.querySelector('.tcg-selected-set-actions');
+            if (!(actionBar instanceof HTMLElement)) {
+              throw new Error('Expected the mobile TCG action bar');
+            }
+
+            const actionRect = actionBar.getBoundingClientRect();
+            return {
+              actionBarBottom: actionRect.bottom,
+              actionBarHeight: actionRect.height,
+              pagePaddingBottom: Number.parseFloat(getComputedStyle(tcgPage).paddingBottom),
+              viewportHeight: window.innerHeight
+            };
+          });
+          expect(mobileMetrics.actionBarBottom).toBeLessThanOrEqual(
+            mobileMetrics.viewportHeight + 1
+          );
+          expect(mobileMetrics.pagePaddingBottom).toBeGreaterThanOrEqual(
+            mobileMetrics.actionBarHeight
+          );
+
+          await openOnePackButton(page).click();
+          const dialog = packDialog(page);
+          await expect(dialog).toBeVisible();
+          await dialog.getByRole('button', { name: /^skip animation$/i }).click();
+          await expectRevealedPackCards(page, 10);
+          await dialog.getByRole('button', { name: /^close$/i }).click();
           expect(
             await page.evaluate(
               () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
@@ -1237,11 +1354,9 @@ test.describe('Pokemon TCG Simulator', () => {
     test.describe('Search', () => {
       // Verifies expansion search narrows results and the selected result controls the opened pack.
       tcgTest('Search valid set', async ({ page }) => {
-        const teamUpSet = expansionSetButton(page, 'Team Up', 'Sun & Moon', 2019);
-
         await expansionSearchInput(page).fill('Team up');
-        await expect(teamUpSet).toBeVisible();
-        await expect(expansionSetButton(page, 'Base', 'Base', 1999)).toBeHidden();
+        await expectExpansionSetAbsentAcrossPages(page, 'Base', 'Base', 1999);
+        const teamUpSet = await findExpansionSetAcrossPages(page, 'Team Up', 'Sun & Moon', 2019);
 
         await teamUpSet.click();
 
@@ -1287,16 +1402,16 @@ test.describe('Pokemon TCG Simulator', () => {
       tcgTest('Search set is case-insensitive and supports partial matches', async ({ page }) => {
         await expansionSearchInput(page).fill('team');
 
-        await expect(expansionSetButton(page, 'Team Up', 'Sun & Moon', 2019)).toBeVisible();
-        await expect(expansionSetButton(page, 'Team Rocket', 'Base', 2000)).toBeVisible();
-        await expect(expansionSetButton(page, 'Base', 'Base', 1999)).toBeHidden();
+        await findExpansionSetAcrossPages(page, 'Team Up', 'Sun & Moon', 2019);
+        await findExpansionSetAcrossPages(page, 'Team Rocket', 'Base', 2000);
+        await expectExpansionSetAbsentAcrossPages(page, 'Base', 'Base', 1999);
       });
 
       // Verifies clearing expansion search restores the full set list.
       tcgTest('Clear set', async ({ page }) => {
         await expansionSearchInput(page).fill('Team up');
-        await expect(expansionSetButton(page, 'Team Up', 'Sun & Moon', 2019)).toBeVisible();
-        await expect(expansionSetButton(page, 'Base', 'Base', 1999)).toBeHidden();
+        await expectExpansionSetAbsentAcrossPages(page, 'Base', 'Base', 1999);
+        await findExpansionSetAcrossPages(page, 'Team Up', 'Sun & Moon', 2019);
 
         await page.getByRole('button', { name: 'Clear expansion search' }).click();
 
@@ -1324,7 +1439,8 @@ test.describe('Pokemon TCG Simulator', () => {
         'Selecting a set from search keeps that set active after clearing search',
         async ({ page }) => {
           await expansionSearchInput(page).fill('Team up');
-          await expansionSetButton(page, 'Team Up', 'Sun & Moon', 2019).click();
+          const teamUpSet = await findExpansionSetAcrossPages(page, 'Team Up', 'Sun & Moon', 2019);
+          await teamUpSet.click();
 
           expect(await getCollectionProgress(page, 'Team Up', 198)).toBe(0);
 
@@ -1352,8 +1468,8 @@ test.describe('Pokemon TCG Simulator', () => {
         await expansionSortSelect(page).selectOption({ label: 'Name: A to Z' });
 
         await expect(expansionSearchInput(page)).toHaveValue('Team up');
-        await expect(expansionSetButton(page, 'Team Up', 'Sun & Moon', 2019)).toBeVisible();
-        await expect(expansionSetButton(page, 'Base', 'Base', 1999)).toBeHidden();
+        await findExpansionSetAcrossPages(page, 'Team Up', 'Sun & Moon', 2019);
+        await expectExpansionSetAbsentAcrossPages(page, 'Base', 'Base', 1999);
       });
 
       // Verifies Pokemon search narrows expansion tiles to sets that contain that Pokemon.

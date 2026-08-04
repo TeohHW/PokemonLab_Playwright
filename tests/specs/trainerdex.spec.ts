@@ -151,8 +151,16 @@ test.describe('@live TrainerDex', () => {
       await expect(page.getByRole('button', { name: /pokemon team planner/i })).toBeVisible();
     });
 
-    // Verifies TrainerDex keeps two web panels and compact mobile scrollers.
+    // Verifies the complete desktop dossier becomes tabbed mobile sections with a team carousel.
     test('Adapts TrainerDex across web and mobile viewports', async ({ page }) => {
+      const sectionTabs = page.getByRole('navigation', { name: 'Trainer dossier sections' });
+      const overviewTab = sectionTabs.getByRole('button', { name: 'Overview', exact: true });
+      const teamTab = sectionTabs.getByRole('button', { name: 'Team', exact: true });
+      const cardsTab = sectionTabs.getByRole('button', { name: 'Cards', exact: true });
+      const overview = page.locator('.trainerdex-hero');
+      const team = page.locator('.trainerdex-team-section');
+      const cards = page.locator('.trainerdex-tcg-section');
+
       await page.setViewportSize({ width: 1024, height: 900 });
       await openTrainerDex(page);
 
@@ -160,6 +168,10 @@ test.describe('@live TrainerDex', () => {
         'grid-template-columns',
         /\d+(?:\.\d+)?px \d+(?:\.\d+)?px/
       );
+      await expect(sectionTabs).toBeHidden();
+      await expect(overview).toBeVisible();
+      await expect(team).toBeVisible();
+      await expect(cards).toBeVisible();
 
       await page.setViewportSize({ width: 390, height: 844 });
 
@@ -174,7 +186,34 @@ test.describe('@live TrainerDex', () => {
       );
       await expect(page.locator('.trainerdex-region-grid')).toHaveCSS('grid-auto-flow', 'column');
       await expect(page.locator('.trainerdex-region-grid')).toHaveCSS('overflow-x', 'auto');
-      await expect(page.locator('.trainerdex-hero')).toHaveCSS('display', 'grid');
+      await expect(sectionTabs).toBeVisible();
+      await expect(sectionTabs).toHaveCSS('position', 'sticky');
+      await expect(overviewTab).toHaveAttribute('aria-pressed', 'true');
+      await expect(overview).toBeVisible();
+      await expect(team).toBeHidden();
+      await expect(cards).toBeHidden();
+
+      await teamTab.click();
+      await expect(teamTab).toHaveAttribute('aria-pressed', 'true');
+      await expect(overview).toBeHidden();
+      await expect(team).toBeVisible();
+      await expect(cards).toBeHidden();
+      await expect(page.locator('.trainerdex-team-panel')).toHaveCSS('grid-auto-flow', 'column');
+      await expect(page.locator('.trainerdex-team-panel')).toHaveCSS('overflow-x', 'auto');
+      expect(await page.locator('.trainerdex-team-row').count()).toBeGreaterThan(1);
+      await expect(page.locator('.trainerdex-move-list li').first()).toBeVisible();
+      expect(
+        await page
+          .locator('.trainerdex-move-list li')
+          .first()
+          .evaluate((move) => Number.parseFloat(getComputedStyle(move).fontSize))
+      ).toBeGreaterThanOrEqual(14);
+
+      await cardsTab.click();
+      await expect(cardsTab).toHaveAttribute('aria-pressed', 'true');
+      await expect(overview).toBeHidden();
+      await expect(team).toBeHidden();
+      await expect(cards).toBeVisible();
       expect(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
