@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/test';
+import { homeStationButton } from '../pages/HomePage';
 
 test.describe("@live Who's That Pokemon", () => {
   const leaderboardStorageKeys = [
@@ -12,7 +13,7 @@ test.describe("@live Who's That Pokemon", () => {
   // Opens the Who's That Pokemon station from the home station chooser.
   async function openWhosThatPokemon(page: Page) {
     await page.goto('/');
-    await page.getByRole('button', { name: /who's that pokemon/i }).click();
+    await homeStationButton(page, 'who').click();
 
     await expect(page.getByRole('heading', { name: /who's that pokemon/i })).toBeVisible();
     await expect(page.getByText('TRAINER SETUP')).toBeVisible();
@@ -42,7 +43,7 @@ test.describe("@live Who's That Pokemon", () => {
       async ({ page }, use) => {
         await page.goto('/');
         await clearWhosThatPokemonLeaderboard(page);
-        await page.getByRole('button', { name: /who's that pokemon/i }).click();
+        await homeStationButton(page, 'who').click();
 
         await expect(page.getByRole('heading', { name: /who's that pokemon/i })).toBeVisible();
         await expect(page.getByText('TRAINER SETUP')).toBeVisible();
@@ -219,7 +220,7 @@ test.describe("@live Who's That Pokemon", () => {
         await expect(page.getByText('LEAVE GAME?')).toBeVisible();
         await page.getByRole('button', { name: /^leave$/i }).click();
 
-        await page.getByRole('button', { name: /who's that pokemon/i }).click();
+        await homeStationButton(page, 'who').click();
 
         await expect(page.getByRole('heading', { name: /^leaderboard$/i })).toBeVisible();
         await expect(page.getByText(/^Ash$/)).toBeVisible();
@@ -244,7 +245,7 @@ test.describe("@live Who's That Pokemon", () => {
         await expect(page.getByText('LEAVE GAME?')).toBeVisible();
         await page.getByRole('button', { name: /^leave$/i }).click();
 
-        await page.getByRole('button', { name: /who's that pokemon/i }).click();
+        await homeStationButton(page, 'who').click();
 
         await expect(page.getByRole('heading', { name: /^leaderboard$/i })).toBeVisible();
         await expect(page.getByText(displayedTrainerName, { exact: true })).toBeVisible();
@@ -271,7 +272,7 @@ test.describe("@live Who's That Pokemon", () => {
         await expect(page.getByText('LEAVE GAME?')).toBeVisible();
         await page.getByRole('button', { name: /^leave$/i }).click();
 
-        await page.getByRole('button', { name: /who's that pokemon/i }).click();
+        await homeStationButton(page, 'who').click();
 
         await expect(page.getByRole('heading', { name: /^leaderboard$/i })).toBeVisible();
         await expect(page.getByText(displayedTrainerName, { exact: true })).toBeVisible();
@@ -841,11 +842,9 @@ test.describe("@live Who's That Pokemon", () => {
       await page.getByRole('button', { name: /^home$/i }).click();
 
       await expect(page.getByText(/choose (?:your|a) station/i)).toBeVisible();
-      await expect(page.getByRole('button', { name: /pokemon tcg simulator/i })).toBeVisible();
-      await expect(
-        page.getByRole('button', { name: /search pokemon by name or number/i })
-      ).toBeVisible();
-      await expect(page.getByRole('button', { name: /who's that pokemon/i })).toBeVisible();
+      await expect(homeStationButton(page, 'tcg')).toBeVisible();
+      await expect(homeStationButton(page, 'pokedex')).toBeVisible();
+      await expect(homeStationButton(page, 'who')).toBeVisible();
     });
 
     // Verifies leaving an active round requires confirmation and returns to the station chooser.
@@ -862,11 +861,9 @@ test.describe("@live Who's That Pokemon", () => {
         await page.getByRole('button', { name: /^leave$/i }).click();
 
         await expect(page.getByText(/choose (?:your|a) station/i)).toBeVisible();
-        await expect(page.getByRole('button', { name: /pokemon tcg simulator/i })).toBeVisible();
-        await expect(
-          page.getByRole('button', { name: /search pokemon by name or number/i })
-        ).toBeVisible();
-        await expect(page.getByRole('button', { name: /who's that pokemon/i })).toBeVisible();
+        await expect(homeStationButton(page, 'tcg')).toBeVisible();
+        await expect(homeStationButton(page, 'pokedex')).toBeVisible();
+        await expect(homeStationButton(page, 'who')).toBeVisible();
       }
     );
 
@@ -966,7 +963,7 @@ test.describe("@live Who's That Pokemon", () => {
         localStorage.setItem('pokemon-who-leaderboard', '{not valid json');
       });
 
-      await page.getByRole('button', { name: /who's that pokemon/i }).click();
+      await homeStationButton(page, 'who').click();
 
       await expect(page.getByText('TRAINER SETUP')).toBeVisible();
       await expect(page.getByRole('heading', { name: /^leaderboard$/i })).toBeVisible();

@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/test';
+import { homeStationButton } from '../pages/HomePage';
 import { installPokeApiRetries } from '../utils/network';
 
 test.describe('@live Pokemon Team Planner', () => {
@@ -18,7 +19,7 @@ test.describe('@live Pokemon Team Planner', () => {
       },
       [teamPlannerStorageKey, teamPlannerLibraryKey]
     );
-    await page.getByRole('button', { name: /pokemon team planner/i }).click();
+    await homeStationButton(page, 'team').click();
 
     await expect(page.getByRole('heading', { name: /pokemon team planner/i })).toBeVisible();
     await expect(page.getByRole('combobox', { name: /game pokedex/i })).toBeVisible();
@@ -267,7 +268,7 @@ test.describe('@live Pokemon Team Planner', () => {
       });
 
       await page.goto('/');
-      await page.getByRole('button', { name: /pokemon team planner/i }).click();
+      await homeStationButton(page, 'team').click();
 
       await expect(page.getByRole('heading', { name: /pokemon team planner/i })).toBeVisible();
       await expect(gamePokedexSelect(page)).toBeVisible();
@@ -955,7 +956,7 @@ test.describe('@live Pokemon Team Planner', () => {
       await page.getByRole('button', { name: /^home$/i }).click();
 
       await expect(page.getByText(/choose (?:your|a) station/i)).toBeVisible();
-      await expect(page.getByRole('button', { name: /pokemon team planner/i })).toBeVisible();
+      await expect(homeStationButton(page, 'team')).toBeVisible();
     });
 
     // Verifies the routed planner remains open while an unsaved roster is still discarded.
@@ -1134,7 +1135,7 @@ test.describe('@live Pokemon Team Planner', () => {
             })
           );
         }, teamPlannerStorageKey);
-        await page.getByRole('button', { name: /pokemon team planner/i }).click();
+        await homeStationButton(page, 'team').click();
 
         await expect(gamePokedexSelect(page)).toHaveValue('all');
         await expect(battleFormatSelect(page)).toHaveValue('open');

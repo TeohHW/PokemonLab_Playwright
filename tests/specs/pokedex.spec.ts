@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/test';
+import { homeStationButton } from '../pages/HomePage';
 import { installPokeApiRetries } from '../utils/network';
 
 test.describe('@live Pokemon Pokedex', () => {
@@ -19,7 +20,7 @@ test.describe('@live Pokemon Pokedex', () => {
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       await page.goto('/');
       await page.evaluate(() => localStorage.removeItem('pokemon-lab-pokedex-view-v1'));
-      await page.getByRole('button', { name: /search pokemon by name or number/i }).click();
+      await homeStationButton(page, 'pokedex').click();
 
       await expect(page.getByPlaceholder('Name or number...')).toBeVisible({ timeout: 30_000 });
       await expect(page.getByRole('button', { name: /^search$/i })).toBeEnabled();
@@ -280,7 +281,7 @@ test.describe('@live Pokemon Pokedex', () => {
       });
 
       await page.goto('/');
-      await page.getByRole('button', { name: /search pokemon by name or number/i }).click();
+      await homeStationButton(page, 'pokedex').click();
 
       await expect(page.getByText('Loading Pokemon...')).toBeVisible();
       await expect(page.getByText(/Choose a Pokemon from All Games/i)).toBeVisible();
@@ -301,10 +302,8 @@ test.describe('@live Pokemon Pokedex', () => {
         await page.getByRole('button', { name: /^home$/i }).click();
 
         await expect(page.getByText(/choose (?:your|a) station/i)).toBeVisible();
-        await expect(page.getByRole('button', { name: /pokemon tcg simulator/i })).toBeVisible();
-        await expect(
-          page.getByRole('button', { name: /search pokemon by name or number/i })
-        ).toBeVisible();
+        await expect(homeStationButton(page, 'tcg')).toBeVisible();
+        await expect(homeStationButton(page, 'pokedex')).toBeVisible();
       }
     );
 

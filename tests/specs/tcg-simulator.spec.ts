@@ -1,5 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { test, expect } from '../fixtures/test';
+import { homeStationButton } from '../pages/HomePage';
 
 test.describe('Pokemon TCG Simulator', () => {
   test.describe.configure({ timeout: 60_000 });
@@ -26,7 +27,7 @@ test.describe('Pokemon TCG Simulator', () => {
       return packButton;
     }
 
-    const simulatorButton = page.locator('.choice-card-tcg');
+    const simulatorButton = homeStationButton(page, 'tcg');
 
     await expect(simulatorButton).toBeEnabled({ timeout: 30_000 });
     await simulatorButton.click();
@@ -567,7 +568,7 @@ test.describe('Pokemon TCG Simulator', () => {
             : route.continue()
         );
         await page.goto('/');
-        await page.getByRole('button', { name: /pokemon tcg simulator/i }).click();
+        await homeStationButton(page, 'tcg').click();
 
         const error = page.getByRole('alert');
         await expect(error).toContainText(/unable to load the local card database/i);

@@ -1,12 +1,13 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/test';
+import { homeStationButton } from '../pages/HomePage';
 
 test.describe('@live Pokemon Quiz', () => {
   // Opens the Pokemon Quiz station from the home station chooser.
   async function openPokemonQuiz(page: Page) {
     await page.goto('/');
     await page.evaluate(() => localStorage.removeItem('pokemon-lab-quiz-best-v1'));
-    await page.getByRole('button', { name: /pokemon quiz/i }).click();
+    await homeStationButton(page, 'quiz').click();
 
     await expect(page.getByRole('heading', { name: /pokemon quiz/i })).toBeVisible();
     await expect(page.getByText(/^Quiz Pool$/i)).toBeVisible();
@@ -178,7 +179,7 @@ test.describe('@live Pokemon Quiz', () => {
 
       await clearBrowserDataCache(page);
       await page.goto('/');
-      await page.getByRole('button', { name: /pokemon quiz/i }).click();
+      await homeStationButton(page, 'quiz').click();
 
       await expect(page.getByRole('heading', { name: /pokemon quiz/i })).toBeVisible();
       await expect(page.getByText(/^Quiz Pool$/i)).toBeVisible();
@@ -640,8 +641,8 @@ test.describe('@live Pokemon Quiz', () => {
       await page.getByRole('button', { name: /^home$/i }).click();
 
       await expect(page.getByText(/choose (?:your|a) station/i)).toBeVisible();
-      await expect(page.getByRole('button', { name: /pokemon team planner/i })).toBeVisible();
-      await expect(page.getByRole('button', { name: /pokemon quiz/i })).toBeVisible();
+      await expect(homeStationButton(page, 'team')).toBeVisible();
+      await expect(homeStationButton(page, 'quiz')).toBeVisible();
     });
     // Verifies Menu behavior while a quiz round is in progress.
     pokemonQuizTest('Menu during an active quiz preserves state', async ({ page }) => {
@@ -685,8 +686,8 @@ test.describe('@live Pokemon Quiz', () => {
         await leaveQuizDialog.getByRole('button', { name: /^leave$/i }).click();
 
         await expect(page.getByText(/choose (?:your|a) station/i)).toBeVisible();
-        await expect(page.getByRole('button', { name: /pokemon quiz/i })).toBeVisible();
-        await expect(page.getByRole('button', { name: /pokemon tcg simulator/i })).toBeVisible();
+        await expect(homeStationButton(page, 'quiz')).toBeVisible();
+        await expect(homeStationButton(page, 'tcg')).toBeVisible();
       }
     );
     // Verifies reloading keeps the routed station and restores local personal-best values.
@@ -783,7 +784,7 @@ test.describe('@live Pokemon Quiz', () => {
 
       await clearBrowserDataCache(page);
       await page.goto('/');
-      await page.getByRole('button', { name: /pokemon quiz/i }).click();
+      await homeStationButton(page, 'quiz').click();
 
       await expect(page.getByRole('heading', { name: /pokemon quiz/i })).toBeVisible();
       await expect(quizPoolSelect(page)).toBeVisible();

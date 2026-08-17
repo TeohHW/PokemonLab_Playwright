@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/test';
+import { homeStationButton } from '../pages/HomePage';
 
 const appStateStorageKey = 'pokemon-lab-app-state-v1';
 
@@ -81,7 +82,7 @@ test.describe('Shared application continuity and accessibility', () => {
     await expect(page).toHaveURL(/#\/$/);
     await expect(page.getByText(/choose (?:your|a) station/i)).toBeVisible();
 
-    await page.getByRole('button', { name: /pokemon tcg simulator/i }).click();
+    await homeStationButton(page, 'tcg').click();
     await expect(page).toHaveURL(/#\/tcg$/);
     await expect(page.getByRole('button', { name: /^open 1 pack$/i })).toBeEnabled();
 

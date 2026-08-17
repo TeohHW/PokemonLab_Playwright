@@ -1,12 +1,13 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/test';
+import { homeStationButton } from '../pages/HomePage';
 
 test.describe('@live TrainerDex', () => {
   // Opens TrainerDex from the home station chooser and waits for the initial Kanto trainer list.
   async function openTrainerDex(page: Page) {
     await page.goto('/');
     await page.evaluate(() => localStorage.removeItem('pokemon-lab-trainerdex-view-v1'));
-    await page.getByRole('button', { name: /trainerdex/i }).click();
+    await homeStationButton(page, 'trainerdex').click();
 
     await expect(page.getByRole('heading', { name: /^trainerdex$/i })).toBeVisible();
     await expect(page.getByText('GAME / REGION')).toBeVisible();
@@ -147,8 +148,8 @@ test.describe('@live TrainerDex', () => {
       await page.getByRole('button', { name: /^home$/i }).click();
 
       await expect(page.getByText(/choose (?:your|a) station/i)).toBeVisible();
-      await expect(page.getByRole('button', { name: /trainerdex/i })).toBeVisible();
-      await expect(page.getByRole('button', { name: /pokemon team planner/i })).toBeVisible();
+      await expect(homeStationButton(page, 'trainerdex')).toBeVisible();
+      await expect(homeStationButton(page, 'team')).toBeVisible();
     });
 
     // Verifies the complete desktop dossier becomes tabbed mobile sections with a team carousel.
@@ -589,7 +590,7 @@ test.describe('@live TrainerDex', () => {
       });
 
       await page.goto('/');
-      await page.getByRole('button', { name: /trainerdex/i }).click();
+      await homeStationButton(page, 'trainerdex').click();
 
       await expect(page.getByRole('heading', { name: /^trainerdex$/i })).toBeVisible();
       await expect(searchInput(page)).toBeVisible();
