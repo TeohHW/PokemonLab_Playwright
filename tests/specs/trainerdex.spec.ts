@@ -173,6 +173,7 @@ test.describe('@live TrainerDex', () => {
       await expect(overview).toBeVisible();
       await expect(team).toBeVisible();
       await expect(cards).toBeVisible();
+      await expect(page.locator('.trainerdex-team-column-headings')).toBeVisible();
 
       await page.setViewportSize({ width: 390, height: 844 });
 
@@ -202,6 +203,10 @@ test.describe('@live TrainerDex', () => {
       await expect(page.locator('.trainerdex-team-panel')).toHaveCSS('grid-auto-flow', 'column');
       await expect(page.locator('.trainerdex-team-panel')).toHaveCSS('overflow-x', 'auto');
       expect(await page.locator('.trainerdex-team-row').count()).toBeGreaterThan(1);
+      await expect(page.locator('.trainerdex-team-column-headings')).toBeHidden();
+      await expect(page.locator('.trainerdex-team-base-stats dl').first()).toBeVisible({
+        timeout: 30_000
+      });
       await expect(page.locator('.trainerdex-move-list li').first()).toBeVisible();
       expect(
         await page
@@ -269,7 +274,9 @@ test.describe('@live TrainerDex', () => {
         await expect(trainerButton(page, 'Brock')).toBeHidden();
         await expect(trainerButton(page, 'Misty')).toBeHidden();
         await expect(trainerDetailHeading(page, 'Brock')).toBeVisible();
-        await expect(trainerDetailText(page, 'POKEMON TEAM')).toBeVisible();
+        await expect(
+          page.getByRole('main').getByRole('heading', { name: 'Pokemon Team', exact: true })
+        ).toBeVisible();
       }
     );
 
@@ -468,19 +475,84 @@ test.describe('@live TrainerDex', () => {
       await expect(teamPokemonButton(page, 'Starmie')).toBeVisible();
     });
 
-    // Verifies clicking a Pokemon opens the team-specific TCG modal and Close dismisses it.
-    trainerDexTest('Team Pokemon opens and closes featured TCG card modal', async ({ page }) => {
-      await teamPokemonButton(page, 'Onix').click();
+    trainerDexTest(
+      'Enriched team rows expose shared headings and six base stats',
+      async ({ page }) => {
+        const teamRows = page.locator('.trainerdex-team-row');
+        const loadedStats = page.locator('.trainerdex-team-base-stats dl');
+        const statLabels = ['HP', 'Attack', 'Defense', 'Sp. Atk', 'Sp. Def', 'Speed'];
 
-      await expect(trainerTcgDialog(page)).toBeVisible();
-      await expect(trainerTcgDialog(page).getByText(/ONIX TCG CARDS/i)).toBeVisible();
-      await expect(trainerTcgDialog(page).getByText(/BROCK'S TEAM/i)).toBeVisible();
+        await expect(loadedStats.first()).toBeVisible({ timeout: 30_000 });
 
-      await page.getByRole('button', { name: /close pokemon tcg cards/i }).click();
+        const columnHeadings = page.locator('.trainerdex-team-column-headings');
+        await expect(columnHeadings).toBeVisible();
+        await expect(columnHeadings.locator('span')).toHaveText(['Pokemon', 'Base Stats', 'Moves']);
 
-      await expect(trainerTcgDialog(page)).toBeHidden();
-      await expect(trainerDetailHeading(page, 'Brock')).toBeVisible();
-    });
+        const rowCount = await teamRows.count();
+        await expect(loadedStats).toHaveCount(rowCount);
+
+        for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+          const row = teamRows.nth(rowIndex);
+          const accessibleName = await row.getAttribute('aria-label');
+          const pokemonName = accessibleName?.match(/^Open (.+) TCG cards$/)?.[1];
+
+          expect(pokemonName).toBeTruthy();
+          await expect(row.locator('.trainerdex-team-heading .trainerdex-type-row')).toBeVisible();
+          await expect(row.getByText('Base Stats', { exact: true })).toHaveCount(0);
+
+          const stats = row.locator('.trainerdex-team-base-stats dl');
+          await expect(stats).toBeVisible();
+          await expect(stats).toHaveAttribute('aria-label', `${pokemonName} base stats`);
+
+          const entries = stats.locator(':scope > div');
+          await expect(entries).toHaveCount(statLabels.length);
+
+          for (let statIndex = 0; statIndex < statLabels.length; statIndex += 1) {
+            const entry = entries.nth(statIndex);
+            const meter = entry.locator('meter');
+            const value = entry.locator('dd');
+
+            await expect(entry.locator('dt')).toHaveText(statLabels[statIndex]);
+            await expect(meter).toHaveAttribute('min', '0');
+            await expect(meter).toHaveAttribute('max', '255');
+            await expect(meter).toHaveAttribute('value', /^\d+$/);
+            await expect(value).toHaveText(/^\d+$/);
+            await expect(meter).toHaveAttribute('value', (await value.textContent()) ?? '');
+          }
+        }
+      }
+    );
+
+    // Verifies pointer and keyboard activation open the team-specific TCG modal.
+    trainerDexTest(
+      'Team Pokemon opens featured TCG cards by click, Enter, and Space',
+      async ({ page }) => {
+        const onix = teamPokemonButton(page, 'Onix');
+        const closeDialog = page.getByRole('button', { name: /close pokemon tcg cards/i });
+
+        await onix.click();
+
+        await expect(trainerTcgDialog(page)).toBeVisible();
+        await expect(trainerTcgDialog(page).getByText(/ONIX TCG CARDS/i)).toBeVisible();
+        await expect(trainerTcgDialog(page).getByText(/BROCK'S TEAM/i)).toBeVisible();
+        await closeDialog.click();
+        await expect(trainerTcgDialog(page)).toBeHidden();
+
+        await onix.focus();
+        await onix.press('Enter');
+        await expect(trainerTcgDialog(page)).toBeVisible();
+        await closeDialog.click();
+        await expect(trainerTcgDialog(page)).toBeHidden();
+
+        await onix.focus();
+        await onix.press('Space');
+        await expect(trainerTcgDialog(page)).toBeVisible();
+        await closeDialog.click();
+
+        await expect(trainerTcgDialog(page)).toBeHidden();
+        await expect(trainerDetailHeading(page, 'Brock')).toBeVisible();
+      }
+    );
 
     // Verifies trainers without local trainer-featured cards show a stable empty card panel.
     trainerDexTest(
@@ -601,11 +673,18 @@ test.describe('@live TrainerDex', () => {
       );
       await expect(loadingTeamStatus).toBeVisible();
       await expect(recommendedTypesPlaceholder).toBeVisible();
+      const teamStatsStatuses = page.locator('.trainerdex-team-stats-status');
+      await expect(teamStatsStatuses.first()).toBeVisible();
+      expect(await teamStatsStatuses.allTextContents()).toEqual(
+        Array(await teamStatsStatuses.count()).fill('Loading stats...')
+      );
 
       releasePokemonRequests();
 
       await expect(loadingTeamStatus).toBeHidden({ timeout: 30_000 });
       await expect(recommendedTypesPlaceholder).toBeHidden();
+      await expect(page.locator('.trainerdex-team-base-stats dl').first()).toBeVisible();
+      await expect(teamStatsStatuses).toHaveCount(0);
       await expect(page.getByText('AVERAGE STATS')).toBeVisible();
       await expect(teamPokemonButton(page, 'Onix')).toBeVisible();
     });

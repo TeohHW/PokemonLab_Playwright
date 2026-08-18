@@ -13,39 +13,127 @@ async function openTcgRoute(page: Page, setId = 'base1') {
 }
 
 test.describe('Shared application continuity and accessibility', () => {
-  test('Empty local state leaves no blank Continue, recent, or favorites panels', async ({
-    page
-  }) => {
+  test('Home hides Continue when local state has no valid station', async ({ page }) => {
     await page.goto('/');
     await page.evaluate(() => localStorage.clear());
     await page.reload();
 
     await expect(page.getByText(/choose (?:your|a) station/i)).toBeVisible();
-    await expect(page.getByRole('heading', { name: /^continue$/i })).toHaveCount(0);
-    await expect(page.getByRole('heading', { name: /^recently viewed$/i })).toHaveCount(0);
+    await expect(page.locator('.home-continue-panel')).toHaveCount(0);
     await expect(page.getByText(/favorites?/i)).toHaveCount(0);
+
+    await page.evaluate((storageKey) => {
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          lastStation: 'unknown-station',
+          lastRoute: { station: 'unknown-station', params: {} },
+          preferences: { reducedMotion: false }
+        })
+      );
+    }, appStateStorageKey);
+    await page.reload();
+
+    await expect(page.locator('.home-continue-panel')).toHaveCount(0);
   });
 
-  test('Continue restores the saved route and Home shows only four newest recent items', async ({
+  test('Continue shows only the latest station with station-specific context', async ({ page }) => {
+    const continueCases = [
+      {
+        lastStation: 'pokedex',
+        lastRoute: {
+          station: 'pokedex',
+          params: { dex: 'kanto', pokemon: 'bulbasaur' }
+        },
+        stationName: 'Pokedex',
+        context: 'Last Pokemon: Bulbasaur'
+      },
+      {
+        lastStation: 'trainerdex',
+        lastRoute: {
+          station: 'trainerdex',
+          params: {
+            trainer: 'misty-kanto',
+            game: 'firered-leafgreen',
+            stage: 'initial'
+          }
+        },
+        stationName: 'TrainerDex',
+        context: 'Last trainer: Misty Kanto'
+      },
+      {
+        lastStation: 'tcg',
+        lastRoute: { station: 'tcg', params: { set: 'base3' } },
+        stationName: 'Pokemon TCG Simulator',
+        context: 'Return to your selected set and binder'
+      },
+      {
+        lastStation: 'team',
+        lastRoute: { station: 'team', params: {} },
+        stationName: 'Pokemon Team Planner',
+        context: 'Return to your current team'
+      },
+      {
+        lastStation: 'quiz',
+        lastRoute: { station: 'quiz', params: {} },
+        stationName: 'Pokemon Quiz',
+        context: 'Return to the quiz'
+      },
+      {
+        lastStation: 'who',
+        lastRoute: { station: 'who', params: {} },
+        stationName: "Who's That Pokemon?",
+        context: 'Return to your challenge'
+      }
+    ];
+
+    await page.goto('/');
+
+    for (const continueCase of continueCases) {
+      await page.evaluate(
+        ({ storageKey, lastStation, lastRoute }) => {
+          localStorage.setItem(
+            storageKey,
+            JSON.stringify({
+              lastStation,
+              lastRoute,
+              preferences: { reducedMotion: false }
+            })
+          );
+        },
+        {
+          storageKey: appStateStorageKey,
+          lastStation: continueCase.lastStation,
+          lastRoute: continueCase.lastRoute
+        }
+      );
+      await page.reload();
+
+      const panel = page.locator('.home-continue-panel');
+      const task = panel.locator('.home-continue-task');
+      const copy = task.locator('.home-continue-copy');
+
+      await expect(panel).toBeVisible();
+      await expect(task).toHaveCount(1);
+      await expect(copy.locator('strong')).toHaveText(continueCase.stationName);
+      await expect(copy.locator('small')).toHaveText(continueCase.context);
+      await expect(task.getByRole('button', { name: 'Resume', exact: true })).toBeVisible();
+    }
+  });
+
+  test('Resume restores saved route parameters from the far-right Continue action', async ({
     page
   }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
     await page.evaluate((storageKey) => {
       localStorage.setItem(
         storageKey,
         JSON.stringify({
-          lastStation: 'tcg',
-          lastRoute: { station: 'tcg', params: { set: 'base3' } },
-          recent: {
-            pokemon: [
-              { id: 'pikachu', label: 'Pikachu', viewedAt: 500 },
-              { id: 'bulbasaur', label: 'Bulbasaur', viewedAt: 100 }
-            ],
-            trainers: [{ id: 'misty', label: 'Misty', viewedAt: 400 }],
-            cards: [
-              { id: 'base1-4', label: 'Charizard', setId: 'base1', viewedAt: 300 },
-              { id: 'base1-10', label: 'Mewtwo', setId: 'base1', viewedAt: 200 }
-            ]
+          lastStation: 'pokedex',
+          lastRoute: {
+            station: 'pokedex',
+            params: { dex: 'kanto', pokemon: 'bulbasaur' }
           },
           preferences: { reducedMotion: false }
         })
@@ -53,23 +141,19 @@ test.describe('Shared application continuity and accessibility', () => {
     }, appStateStorageKey);
     await page.reload();
 
-    await expect(page.getByRole('heading', { name: /^pokemon tcg simulator$/i })).toBeVisible();
-    const recentItems = page.locator('.home-library-item');
-    await expect(recentItems).toHaveCount(4);
-    await expect(recentItems).toHaveText([
-      /PokemonPikachu/,
-      /TrainerMisty/,
-      /CardCharizard/,
-      /CardMewtwo/
-    ]);
-    await expect(page.getByRole('button', { name: /bulbasaur/i })).toHaveCount(0);
+    const task = page.locator('.home-continue-task');
+    const resume = task.getByRole('button', { name: 'Resume', exact: true });
+    const [taskBox, resumeBox] = await Promise.all([task.boundingBox(), resume.boundingBox()]);
 
-    await page.getByRole('button', { name: /^resume$/i }).click();
+    expect(taskBox).not.toBeNull();
+    expect(resumeBox).not.toBeNull();
+    expect(Math.abs(taskBox!.x + taskBox!.width - (resumeBox!.x + resumeBox!.width))).toBeLessThan(
+      1
+    );
 
-    await expect(page).toHaveURL(/#\/tcg\?set=base3$/);
-    await expect(page.getByLabel('Collection binder')).toContainText('Fossil collection progress', {
-      timeout: 30_000
-    });
+    await resume.click();
+
+    await expect(page).toHaveURL(/#\/pokedex\?dex=kanto&pokemon=bulbasaur$/);
   });
 
   test('Direct station routes participate in browser Back and Forward navigation', async ({

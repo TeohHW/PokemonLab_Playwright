@@ -150,14 +150,31 @@ test.describe('@live Pokemon Team Planner', () => {
   }
 
   async function clearClientCaches(page: Page) {
-    await page.addInitScript(() => {
+    await page.goto('/');
+    await page.evaluate(async () => {
       localStorage.clear();
       sessionStorage.clear();
-      void indexedDB
-        .databases?.()
-        .then((databases) =>
-          databases.forEach((database) => database.name && indexedDB.deleteDatabase(database.name))
-        );
+
+      const databases = (await indexedDB.databases?.()) ?? [];
+      await Promise.all(
+        databases.map(
+          (database) =>
+            new Promise<void>((resolve, reject) => {
+              if (!database.name) {
+                resolve();
+                return;
+              }
+
+              const deletion = indexedDB.deleteDatabase(database.name);
+              deletion.onsuccess = () => resolve();
+              deletion.onerror = () => reject(deletion.error);
+              deletion.onblocked = () => reject(new Error(`Unable to clear ${database.name}`));
+            })
+        )
+      );
+
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
     });
   }
 

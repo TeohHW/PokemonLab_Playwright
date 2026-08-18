@@ -111,6 +111,16 @@ test.describe("@live Who's That Pokemon", () => {
     await expect(page.getByText(/Correct! Click the Pokemon to open its entry\./i)).toBeVisible();
   }
 
+  async function advanceToNextPokemon(page: Page) {
+    const guessInput = page.getByPlaceholder('Pokemon name...');
+    const nextButton = page.getByRole('button', { name: /^next pokemon$/i });
+
+    await expect(nextButton).toBeVisible();
+    await nextButton.press('Enter');
+    await expect(guessInput).toHaveValue('');
+    await expect(page.getByRole('button', { name: /^guess$/i })).toBeEnabled();
+  }
+
   async function openGameMenu(page: Page) {
     await page.getByRole('button', { name: /^open game menu$/i }).click();
     await expect(page.getByLabel('Leaderboard')).toBeVisible();
@@ -403,7 +413,7 @@ test.describe("@live Who's That Pokemon", () => {
       await expect(page.getByRole('button', { name: /^guess$/i })).toBeVisible();
       await page.getByRole('searchbox', { name: 'Pokemon name...' }).fill('Test');
       await page.getByRole('button', { name: 'Guess' }).click();
-      await page.getByRole('button', { name: 'Next Pokemon' }).click();
+      await advanceToNextPokemon(page);
       await expect(page.getByPlaceholder('Pokemon name...')).toBeVisible();
       await expect(page.getByRole('button', { name: /^hint 1$/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /^guess$/i })).toBeVisible();
@@ -426,7 +436,7 @@ test.describe("@live Who's That Pokemon", () => {
         ).toBeVisible();
         await expectScoreAndRounds(page, 1, 1);
 
-        await page.getByRole('button', { name: /^next pokemon$/i }).click();
+        await advanceToNextPokemon(page);
         await expect(page.getByPlaceholder('Pokemon name...')).toBeVisible();
 
         await page.getByPlaceholder('Pokemon name...').fill('notapokemon');
@@ -437,7 +447,7 @@ test.describe("@live Who's That Pokemon", () => {
         ).toBeVisible();
         await expectScoreAndRounds(page, 1, 2);
 
-        await page.getByRole('button', { name: /^next pokemon$/i }).click();
+        await advanceToNextPokemon(page);
         await expect(page.getByPlaceholder('Pokemon name...')).toBeVisible();
 
         const secondCorrectGuess = await currentMysteryPokemonName(page);
@@ -684,7 +694,7 @@ test.describe("@live Who's That Pokemon", () => {
           await page.getByRole('button', { name: /^guess$/i }).click();
           await expectScoreAndRounds(page, 0, round);
           if (round < 10) {
-            await page.getByRole('button', { name: /^next pokemon$/i }).click();
+            await advanceToNextPokemon(page);
             await expect(page.getByPlaceholder('Pokemon name...')).toBeVisible({ timeout: 30_000 });
           }
         }
@@ -727,7 +737,7 @@ test.describe("@live Who's That Pokemon", () => {
         await page.getByPlaceholder('Pokemon name...').fill(correctGuess);
         await page.getByRole('button', { name: /^guess$/i }).click();
         await expectScoreAndRounds(page, 1, 1);
-        await page.getByRole('button', { name: 'Next Pokemon' }).click();
+        await advanceToNextPokemon(page);
         await page.getByRole('button', { name: 'Open game menu' }).click();
         await expect(page.getByRole('article')).toContainText(`#1${trainerName}`);
       }
@@ -743,17 +753,17 @@ test.describe("@live Who's That Pokemon", () => {
         await startGame(page, lowScoreTrainerName);
         await answerCurrentRoundCorrectly(page);
         await expectScoreAndRounds(page, 1, 1);
-        await page.getByRole('button', { name: /^next pokemon$/i }).click();
+        await advanceToNextPokemon(page);
         await openGameMenu(page);
         await startNewPlayerFromMenu(page);
 
         await startGame(page, highScoreTrainerName);
         await answerCurrentRoundCorrectly(page);
         await expectScoreAndRounds(page, 1, 1);
-        await page.getByRole('button', { name: /^next pokemon$/i }).click();
+        await advanceToNextPokemon(page);
         await answerCurrentRoundCorrectly(page);
         await expectScoreAndRounds(page, 2, 2);
-        await page.getByRole('button', { name: /^next pokemon$/i }).click();
+        await advanceToNextPokemon(page);
         await openGameMenu(page);
 
         const leaderboard = page.getByLabel('Leaderboard');
@@ -782,7 +792,7 @@ test.describe("@live Who's That Pokemon", () => {
         await startGame(page, trainerName);
         await answerCurrentRoundCorrectly(page);
         await expectScoreAndRounds(page, 1, 1);
-        await page.getByRole('button', { name: /^next pokemon$/i }).click();
+        await advanceToNextPokemon(page);
         await openGameMenu(page);
 
         await page.getByRole('button', { name: /^reset$/i }).click();
@@ -797,7 +807,7 @@ test.describe("@live Who's That Pokemon", () => {
         await page.getByRole('button', { name: /^resume$/i }).click();
         await answerCurrentRoundCorrectly(page);
         await expectScoreAndRounds(page, 2, 2);
-        await page.getByRole('button', { name: /^next pokemon$/i }).click();
+        await advanceToNextPokemon(page);
         await openGameMenu(page);
 
         await expect(page.getByLabel('Leaderboard')).toContainText(
@@ -818,7 +828,7 @@ test.describe("@live Who's That Pokemon", () => {
       await page.getByPlaceholder('Pokemon name...').fill(correctGuess);
       await page.getByRole('button', { name: /^guess$/i }).click();
       await expectScoreAndRounds(page, 1, 1);
-      await page.getByRole('button', { name: 'Next Pokemon' }).click();
+      await advanceToNextPokemon(page);
       await page.getByRole('button', { name: 'Open game menu' }).click();
       await page.getByRole('button', { name: 'Reset' }).click();
       await page.getByLabel('Reset Leaderboard?').getByRole('button', { name: 'Reset' }).click();

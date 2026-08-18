@@ -291,13 +291,23 @@ test.describe('Pokemon TCG Simulator', () => {
     return page.getByRole('button', { name: /\b\d{4}\b/ });
   }
 
+  // Waits for React to commit the requested page before another pagination decision is made.
+  async function changeExpansionPage(pagination: Locator, pageButton: Locator) {
+    const previousPageLabel = (await pagination.innerText()).replace(/\s+/g, ' ').trim();
+
+    await pageButton.click();
+    await expect
+      .poll(async () => (await pagination.innerText()).replace(/\s+/g, ' ').trim())
+      .not.toBe(previousPageLabel);
+  }
+
   // Returns paged expansion results to their first page before a complete result scan.
   async function returnToFirstExpansionPage(page: Page) {
     const pagination = page.getByRole('navigation', { name: 'Expansion set pages' });
     const previousButton = pagination.getByRole('button', { name: 'Prev', exact: true });
 
     while (await previousButton.isEnabled()) {
-      await previousButton.click();
+      await changeExpansionPage(pagination, previousButton);
     }
 
     await expect(pagination).toContainText('Page 1 /');
@@ -320,7 +330,7 @@ test.describe('Pokemon TCG Simulator', () => {
       if (!(await nextButton.isEnabled())) {
         break;
       }
-      await nextButton.click();
+      await changeExpansionPage(pagination, nextButton);
     }
 
     await expect(setButton).toBeVisible();
@@ -345,7 +355,7 @@ test.describe('Pokemon TCG Simulator', () => {
       if (!(await nextButton.isEnabled())) {
         break;
       }
-      await nextButton.click();
+      await changeExpansionPage(pagination, nextButton);
     }
   }
 
@@ -539,7 +549,6 @@ test.describe('Pokemon TCG Simulator', () => {
           await openOnePackButton(page).click();
           const dialog = packDialog(page);
           await expect(dialog).toBeVisible();
-          await dialog.getByRole('button', { name: /^skip animation$/i }).click();
           await expectRevealedPackCards(page, 10);
           await dialog.getByRole('button', { name: /^close$/i }).click();
           await expect(dialog).toBeHidden();
