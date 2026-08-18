@@ -39,22 +39,12 @@ test.describe('@live TrainerDex', () => {
   }
 
   function regionButton(page: Page, regionName: string) {
-    const regionCardNames: Record<string, RegExp> = {
-      Kanto: /FireRed\s*\/\s*LeafGreen\s+Kanto/i,
-      Johto: /HeartGold\s*\/\s*SoulSilver\s+Johto/i,
-      Hoenn: /Omega Ruby\s*\/\s*Alpha Sapphire\s+Hoenn/i,
-      Sinnoh: /Diamond\s*\/\s*Pearl\s*\/\s*Platinum\s+Sinnoh/i,
-      Unova: /Black\s*\/\s*White\s*\/\s*Black 2\s*\/\s*White 2\s+Unova/i,
-      Kalos: /X\s*\/\s*Y\s+Kalos/i,
-      Alola: /Sun\s*\/\s*Moon\s+Alola/i,
-      Galar: /Sword\s*\/\s*Shield\s+Galar/i,
-      Paldea: /Scarlet\s*\/\s*Violet\s+Paldea/i,
-      'Lumiose City': /Legends:\s*Z-A\s+Lumiose City/i
-    };
+    const escapedRegionName = regionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-    return page.getByRole('complementary').getByRole('button', {
-      name: regionCardNames[regionName] ?? new RegExp(regionName, 'i')
-    });
+    return page
+      .getByRole('complementary')
+      .locator('.trainerdex-region-card')
+      .filter({ hasText: new RegExp(`${escapedRegionName}\\s*$`, 'i') });
   }
 
   function gameVersionButton(page: Page, versionName: string) {
@@ -118,7 +108,7 @@ test.describe('@live TrainerDex', () => {
       await expect(
         page
           .getByLabel('Pokemon team battle stage')
-          .getByRole('button', { name: /^initial team$/i })
+          .getByRole('button', { name: /^pewter gym battle$/i })
       ).toHaveClass(/is-selected/);
       await expect(page.getByText(/^TRAINERS$/i)).toBeVisible();
       await expect(trainerButton(page, 'Brock')).toBeVisible();
@@ -418,7 +408,9 @@ test.describe('@live TrainerDex', () => {
         .click();
 
       const battleStages = page.getByLabel('Pokemon team battle stage');
-      await expect(battleStages.getByRole('button', { name: /^initial team$/i })).toBeVisible();
+      await expect(
+        battleStages.getByRole('button', { name: /^pewter gym battle$/i })
+      ).toBeVisible();
       await expect(
         battleStages.getByRole('button', { name: /^fighting dojo rematch$/i })
       ).toBeVisible();
@@ -441,6 +433,205 @@ test.describe('@live TrainerDex', () => {
         await expect(trainerDetailText(page, 'Cerulean City Gym Leader')).toBeVisible();
       }
     );
+  });
+
+  test.describe('Trainer Data Regressions', () => {
+    trainerDexTest(
+      'Kanto game split exposes Koga in FireRed LeafGreen and Janine in HeartGold SoulSilver',
+      async ({ page }) => {
+        await expect(trainerButton(page, 'Koga')).toBeVisible();
+        await expect(trainerButton(page, 'Janine')).toBeHidden();
+
+        await gameVersionButton(page, 'HEARTGOLD SOULSILVER').click();
+
+        await expect(gameVersionButton(page, 'HEARTGOLD SOULSILVER')).toHaveClass(/is-selected/);
+        await expect(trainerButton(page, 'Janine')).toBeVisible();
+        await expect(trainerButton(page, 'Koga')).toBeHidden();
+        await trainerButton(page, 'Janine').click();
+
+        await expect(trainerDetailHeading(page, 'Janine')).toBeVisible();
+        await expect(page.locator('.trainerdex-game-version-button')).toHaveCount(1);
+
+        const battleStages = page.getByLabel('Pokemon team battle stage');
+        await expect(battleStages.getByRole('button')).toHaveText([
+          'Fuchsia Gym battle',
+          'Fighting Dojo rematch'
+        ]);
+
+        const teamRows = page.locator('.trainerdex-team-row');
+        await expect(teamRows).toHaveCount(5);
+        expect(
+          await teamRows.evaluateAll((rows) => rows.map((row) => row.getAttribute('aria-label')))
+        ).toEqual([
+          'Open Crobat TCG cards',
+          'Open Weezing TCG cards',
+          'Open Ariados TCG cards',
+          'Open Ariados TCG cards',
+          'Open Venomoth TCG cards'
+        ]);
+        await expect(teamRows.first()).toContainText('Lv. 47');
+        await expect(teamRows.first().locator('.trainerdex-move-list li')).toHaveText([
+          'Screech',
+          'Supersonic',
+          'Confuse Ray',
+          'Wing Attack'
+        ]);
+        await expect(teamRows.last()).toContainText('Lv. 50');
+      }
+    );
+
+    trainerDexTest(
+      'Single unchanged team omits redundant battle stages and retired source panels',
+      async ({ page }) => {
+        await expect(gameVersionButton(page, 'FIRERED LEAFGREEN')).toHaveClass(/is-selected/);
+        await expect(page.locator('.trainerdex-battle-stage-toggle')).toHaveCount(0);
+
+        const teamRows = page.locator('.trainerdex-team-row');
+        await expect(teamRows).toHaveCount(2);
+        expect(
+          await teamRows.evaluateAll((rows) => rows.map((row) => row.getAttribute('aria-label')))
+        ).toEqual(['Open Geodude TCG cards', 'Open Onix TCG cards']);
+
+        const main = page.getByRole('main');
+        await expect(
+          main.getByRole('heading', { name: /^(?:sources?|references?)$/i })
+        ).toHaveCount(0);
+        await expect(main.locator('a[href*="serebii" i], a[href*="bulbapedia" i]')).toHaveCount(0);
+      }
+    );
+
+    trainerDexTest(
+      'Starter-dependent teams show shared members once and all variations together',
+      async ({ page }) => {
+        await trainerButton(page, 'Blue').click();
+        await expect(trainerDetailHeading(page, 'Blue')).toBeVisible();
+
+        const battleStages = page.getByLabel('Pokemon team battle stage');
+        await expect(battleStages.getByRole('button')).toHaveText([
+          'Champion battle',
+          'League rematch'
+        ]);
+
+        const main = page.getByRole('main');
+        const sharedTeam = main.getByRole('region', { name: 'Shared Pokemon team members' });
+        const sharedRows = sharedTeam.locator('.trainerdex-team-row');
+        await expect(sharedRows).toHaveCount(3);
+        expect(
+          await sharedRows.evaluateAll((rows) => rows.map((row) => row.getAttribute('aria-label')))
+        ).toEqual(['Open Pidgeot TCG cards', 'Open Alakazam TCG cards', 'Open Rhydon TCG cards']);
+        await expect(main.getByRole('button', { name: /^Open Pidgeot TCG cards$/i })).toHaveCount(
+          1
+        );
+
+        const starterSection = main.getByRole('region', { name: 'Starter-dependent members' });
+        await expect(starterSection).toContainText('All three possibilities are shown here.');
+        const variantGroups = starterSection.getByRole('region');
+        await expect(variantGroups).toHaveCount(3);
+        expect(
+          await variantGroups.evaluateAll((groups) =>
+            groups.map((group) => group.getAttribute('aria-label'))
+          )
+        ).toEqual(['Player chose Bulbasaur', 'Player chose Charmander', 'Player chose Squirtle']);
+        await expect(
+          main.getByRole('button', {
+            name: /^Player chose (?:Bulbasaur|Charmander|Squirtle)$/i
+          })
+        ).toHaveCount(0);
+
+        const bulbasaurRows = starterSection
+          .getByRole('region', { name: 'Player chose Bulbasaur' })
+          .locator('.trainerdex-team-row');
+        expect(
+          await bulbasaurRows.evaluateAll((rows) =>
+            rows.map((row) => row.getAttribute('aria-label'))
+          )
+        ).toEqual([
+          'Open Exeggutor TCG cards',
+          'Open Gyarados TCG cards',
+          'Open Charizard TCG cards'
+        ]);
+        await expect(bulbasaurRows.last()).toContainText('Lv. 63');
+        await expect(bulbasaurRows.last().locator('.trainerdex-move-list li')).toHaveText([
+          'Fire Blast',
+          'Aerial Ace',
+          'Slash',
+          'Fire Spin'
+        ]);
+
+        await battleStages.getByRole('button', { name: /^league rematch$/i }).click();
+        await expect(sharedRows.first()).toHaveAttribute('aria-label', 'Open Heracross TCG cards');
+        await expect(sharedRows.first()).toContainText('Lv. 72');
+        await expect(sharedRows.first().locator('.trainerdex-move-list li')).toHaveText([
+          'Megahorn',
+          'Earthquake',
+          'Counter',
+          'Rock Tomb'
+        ]);
+        await expect(page).toHaveURL(
+          /#\/trainerdex\?trainer=blue-kanto&game=firered-leafgreen&stage=rematch$/
+        );
+      }
+    );
+
+    test('Unverified move sets show an explicit unavailable message', async ({ page }) => {
+      await page.goto(
+        '/#/trainerdex?trainer=roxanne-hoenn&game=omega-ruby-alpha-sapphire&stage=initial'
+      );
+
+      await expect(page.getByRole('heading', { name: /^trainerdex$/i })).toBeVisible();
+      await expect(trainerDetailHeading(page, 'Roxanne')).toBeVisible({ timeout: 30_000 });
+      await expect(gameVersionButton(page, 'OMEGA RUBY ALPHA SAPPHIRE')).toHaveClass(/is-selected/);
+
+      const teamRows = page.locator('.trainerdex-team-row');
+      const unavailableMoves = page.locator('.trainerdex-moves-unverified');
+      await expect(teamRows).toHaveCount(2);
+      await expect(unavailableMoves).toHaveCount(2);
+      await expect(unavailableMoves).toHaveText([
+        'Moves not yet source-verified.',
+        'Moves not yet source-verified.'
+      ]);
+    });
+
+    test('Multi-stage rematch controls wrap without mobile page overflow', async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto('/#/trainerdex?trainer=leon-galar&game=sword-shield&stage=initial');
+
+      await expect(page.getByRole('heading', { name: /^trainerdex$/i })).toBeVisible();
+      await expect(trainerDetailHeading(page, 'Leon')).toBeVisible({ timeout: 30_000 });
+      await page
+        .getByRole('navigation', { name: 'Trainer dossier sections' })
+        .getByRole('button', { name: 'Team', exact: true })
+        .click();
+
+      const battleStages = page.getByLabel('Pokemon team battle stage');
+      const stageButtons = battleStages.getByRole('button');
+      await expect(battleStages).toBeVisible();
+      await expect(battleStages).toHaveCSS('flex-wrap', 'wrap');
+      await expect(stageButtons).toHaveText([
+        'Champion battle',
+        'Champion Cup rematch',
+        'Post-Star Tournament'
+      ]);
+      expect(
+        await stageButtons.evaluateAll((buttons) =>
+          buttons.every((button) => {
+            const bounds = button.getBoundingClientRect();
+            return bounds.left >= 0 && bounds.right <= window.innerWidth + 1;
+          })
+        )
+      ).toBeTruthy();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
+        )
+      ).toBeTruthy();
+
+      await stageButtons.filter({ hasText: /^Post-Star Tournament$/i }).click();
+      await expect(teamPokemonButton(page, 'Aegislash')).toContainText('Lv. 80');
+      await expect(page).toHaveURL(
+        /#\/trainerdex\?trainer=leon-galar&game=sword-shield&stage=late$/
+      );
+    });
   });
 
   test.describe('Trainer Details', () => {
@@ -499,7 +690,7 @@ test.describe('@live TrainerDex', () => {
     });
 
     trainerDexTest(
-      'Enriched team rows expose shared headings and six base stats',
+      'Enriched team rows expose shared headings and six current base stats',
       async ({ page }) => {
         const teamRows = page.locator('.trainerdex-team-row');
         const loadedStats = page.locator('.trainerdex-team-base-stats dl');
@@ -509,7 +700,11 @@ test.describe('@live TrainerDex', () => {
 
         const columnHeadings = page.locator('.trainerdex-team-column-headings');
         await expect(columnHeadings).toBeVisible();
-        await expect(columnHeadings.locator('span')).toHaveText(['Pokemon', 'Base Stats', 'Moves']);
+        await expect(columnHeadings.locator('span')).toHaveText([
+          'Pokemon',
+          'Current Base Stats',
+          'Moves'
+        ]);
 
         const rowCount = await teamRows.count();
         await expect(loadedStats).toHaveCount(rowCount);
@@ -521,7 +716,7 @@ test.describe('@live TrainerDex', () => {
 
           expect(pokemonName).toBeTruthy();
           await expect(row.locator('.trainerdex-team-heading .trainerdex-type-row')).toBeVisible();
-          await expect(row.getByText('Base Stats', { exact: true })).toHaveCount(0);
+          await expect(row.getByText('Current Base Stats', { exact: true })).toHaveCount(0);
 
           const stats = row.locator('.trainerdex-team-base-stats dl');
           await expect(stats).toBeVisible();
