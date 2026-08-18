@@ -56,7 +56,6 @@ test.describe('Pokemon TCG Simulator', () => {
         await page.goto('/');
         await page.evaluate(() => {
           localStorage.removeItem('pokemon-pack-simulator-collection');
-          localStorage.removeItem('pokemon-lab-tcg-view-v1');
           localStorage.removeItem('pokemon-lab-tcg-pull-history-v1');
         });
         await enterTcgSimulator(page);
@@ -466,6 +465,24 @@ test.describe('Pokemon TCG Simulator', () => {
         expect(await getCollectionProgress(page, 'Base', 102)).toBe(0);
         await expect(page.getByRole('heading', { name: /^binder$/i })).toBeVisible();
       });
+
+      tcgTest(
+        'Home entry starts with Base instead of the previously selected set',
+        async ({ page }) => {
+          await expansionSetButton(page, 'Fossil', 'Base', 1999).click();
+          await expect(page).toHaveURL(/#\/tcg\?set=base3$/);
+          await expect(page.getByLabel('Collection binder')).toContainText(
+            'Fossil collection progress'
+          );
+
+          await page.locator('.brand-home-button').click();
+          await homeStationButton(page, 'tcg').click();
+
+          await expect(page).toHaveURL(/#\/tcg$/);
+          expect(await getCollectionProgress(page, 'Base', 102)).toBe(0);
+          await expect(page.getByText(/Fossil collection progress/i)).toBeHidden();
+        }
+      );
 
       // Verifies paged expansion browsing and pack controls remain usable in desktop and mobile layouts.
       tcgTest(

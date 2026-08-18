@@ -1054,9 +1054,9 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(savedTeams).not.toContainText('Saved Team 12');
     });
 
-    // Verifies the scenario: Saved planner choices and build customizations survive reload.
+    // Verifies a fresh Home entry stays empty while Resume restores the saved workspace.
     teamPlannerTest(
-      'Saved planner choices and build customizations survive reload',
+      'Saved workspace restores only through Resume while the team library remains available',
       async ({ page }) => {
         await addPokemon(page, 1, 'Bulbasaur');
         await openBuildOptions(page, 'Bulbasaur');
@@ -1091,7 +1091,6 @@ test.describe('@live Pokemon Team Planner', () => {
         await saveButton.click();
 
         await expect(page.getByRole('button', { name: /^update team$/i })).toBeEnabled();
-        await expect(page.getByText(/this team will be restored after reload/i)).toBeVisible();
         await expect
           .poll(() =>
             page.evaluate((storageKey) => {
@@ -1116,9 +1115,20 @@ test.describe('@live Pokemon Team Planner', () => {
             useNatureAdjustedStats: false
           });
 
-        await page.reload();
+        await page.locator('.brand-home-button').click();
+        await homeStationButton(page, 'team').click();
 
         await expect(page).toHaveURL(/#\/team$/);
+        await expect(page.getByText('0/6 selected')).toBeVisible();
+        await expect(occupiedTeamCards(page)).toHaveCount(0);
+        await expect(gamePokedexSelect(page)).toHaveValue('all');
+        await expect(battleFormatSelect(page)).toHaveValue('open');
+        await expect(page.getByText('1/12 saved teams')).toBeVisible();
+
+        await page.locator('.brand-home-button').click();
+        await page.getByRole('button', { name: 'Resume', exact: true }).click();
+
+        await expect(page).toHaveURL(/#\/team\?resume=1$/);
         await expect(page.getByText('1/6 selected')).toBeVisible();
         await expect(teamCard(page, 'Bulbasaur')).toBeVisible();
         await expect(gamePokedexSelect(page)).toHaveValue(selectedDex);
@@ -1131,7 +1141,6 @@ test.describe('@live Pokemon Team Planner', () => {
         await showPlannerView(page, 'Build');
         await openBuildOptions(page, 'Bulbasaur');
         await expect(moveSelect(page, 1).locator('option:checked')).toContainText(/Vine Whip/i);
-        await expect(page.getByText(/this team will be restored after reload/i)).toBeVisible();
 
         await moveSelect(page, 1).selectOption('');
         await expect(page.getByRole('button', { name: /^save team$/i })).toBeEnabled();

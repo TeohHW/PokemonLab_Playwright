@@ -94,18 +94,41 @@ test.describe('@live TrainerDex', () => {
   }
 
   test.describe('Station / Initial Load', () => {
-    // Verifies the station opens with region/version controls, trainer list, and Brock detail.
-    trainerDexTest('Starts TrainerDex station', async ({ page }) => {
+    test('Home entry starts with the default trainer, game, and battle stage', async ({ page }) => {
+      await page.goto('/');
+      await page.evaluate(() => {
+        localStorage.setItem(
+          'pokemon-lab-trainerdex-view-v1',
+          JSON.stringify({
+            trainer: 'misty-kanto',
+            game: 'firered-leafgreen',
+            stage: 'initial'
+          })
+        );
+      });
+
+      await homeStationButton(page, 'trainerdex').click();
+
+      await expect(page).toHaveURL(
+        /#\/trainerdex\?trainer=brock-kanto&game=heartgold-soulsilver&stage=initial$/
+      );
       await expect(regionButton(page, 'Kanto')).toBeVisible();
       await expect(gameVersionButton(page, 'FIRERED LEAFGREEN')).toBeVisible();
-      await expect(gameVersionButton(page, 'HEARTGOLD SOULSILVER')).toBeVisible();
+      await expect(gameVersionButton(page, 'HEARTGOLD SOULSILVER')).toHaveClass(/is-selected/);
+      await expect(
+        page
+          .getByLabel('Pokemon team battle stage')
+          .getByRole('button', { name: /^initial team$/i })
+      ).toHaveClass(/is-selected/);
       await expect(page.getByText(/^TRAINERS$/i)).toBeVisible();
       await expect(trainerButton(page, 'Brock')).toBeVisible();
       await expect(trainerButton(page, 'Misty')).toBeVisible();
       await expect(trainerDetailHeading(page, 'Brock')).toBeVisible();
       await expect(trainerDetailText(page, 'Pewter City Gym Leader')).toBeVisible();
-      await expect(trainerDetailText(page, 'POKEMON TEAM')).toBeVisible();
-      await expect(teamPokemonButton(page, 'Geodude')).toBeVisible();
+      await expect(
+        page.getByRole('main').getByRole('heading', { name: 'Pokemon Team', exact: true })
+      ).toBeVisible();
+      await expect(teamPokemonButton(page, 'Graveler')).toBeVisible();
       await expect(teamPokemonButton(page, 'Onix')).toBeVisible();
     });
 

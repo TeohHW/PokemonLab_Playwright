@@ -186,7 +186,38 @@ test.describe('@live Pokemon Pokedex', () => {
     );
   }
 
+  // Locates the level-up movelist and its compact game-version control.
+  function levelUpMovesDisclosure(page: Page) {
+    return page.locator('details').filter({
+      has: page.locator('summary').filter({ hasText: /level-up moves/i })
+    });
+  }
+
+  function levelUpMoveVersionSelect(page: Page) {
+    return page.getByLabel('Game version', { exact: true });
+  }
+
   test.describe('Station / Initial Load', () => {
+    test('Home entry ignores the saved Pokedex and Pokemon view', async ({ page }) => {
+      await installPokeApiRetries(page);
+      await page.goto('/');
+      await page.evaluate(() => {
+        localStorage.setItem(
+          'pokemon-lab-pokedex-view-v1',
+          JSON.stringify({ dex: 'kanto', pokemon: 'bulbasaur' })
+        );
+      });
+
+      await homeStationButton(page, 'pokedex').click();
+
+      await expect(page).toHaveURL(/#\/pokedex$/);
+      await expect(page.getByRole('button', { name: /^all games/i })).toHaveClass(/is-selected/);
+      await expect(pokemonDetailCard(page)).toContainText(
+        'Choose a Pokemon from All Games to inspect its data.'
+      );
+      await expect(page.getByRole('button', { name: /^Play .+ cry$/i })).toHaveCount(0);
+    });
+
     // Verifies the Pokedex station opens with filters, search, sort, and the default list.
     pokedexTest('Starts Pokedex station', async ({ page }) => {
       await expect(page.getByRole('button', { name: /^all games/i })).toBeVisible();
@@ -371,6 +402,15 @@ test.describe('@live Pokemon Pokedex', () => {
       await expect(forms).toBeHidden();
       await expect(moves).toBeVisible();
       await expect(cards).toBeHidden();
+
+      await levelUpMovesDisclosure(page).locator('summary').click();
+      await expect(levelUpMoveVersionSelect(page)).toBeVisible();
+      const mobilePageWidths = await page.evaluate(() => ({
+        client: document.documentElement.clientWidth,
+        scroll: document.documentElement.scrollWidth
+      }));
+
+      expect(mobilePageWidths.scroll).toBeLessThanOrEqual(mobilePageWidths.client + 1);
 
       await cardsTab.click();
       await expect(cardsTab).toHaveAttribute('aria-pressed', 'true');
@@ -558,6 +598,71 @@ test.describe('@live Pokemon Pokedex', () => {
       }
     );
 
+    // Verifies equivalent movelists share one option while distinct game pairings remain separate.
+    pokedexTest(
+      'Level-up moves use a generation-grouped game version dropdown',
+      async ({ page }) => {
+        await pokemonListButton(page, 1, 'Bulbasaur').click();
+
+        const movesDisclosure = levelUpMovesDisclosure(page);
+        const summary = movesDisclosure.locator('summary');
+        const versionSelect = levelUpMoveVersionSelect(page);
+
+        await summary.click();
+        await expect(versionSelect).toBeVisible();
+        await expect(versionSelect).toHaveValue('scarlet-violet');
+        await expect(versionSelect).toHaveAttribute(
+          'aria-describedby',
+          'level-up-move-version-note'
+        );
+
+        const versionGroups = await versionSelect.locator('optgroup').evaluateAll((groups) =>
+          groups.map((group) => ({
+            generation: group.getAttribute('label'),
+            versions: Array.from(group.querySelectorAll('option')).map((option) =>
+              option.textContent?.trim()
+            )
+          }))
+        );
+
+        expect(versionGroups).toEqual([
+          { generation: 'Generation IX', versions: ['Scarlet & Violet'] },
+          { generation: 'Generation VIII', versions: ['Sword & Shield'] },
+          { generation: 'Generation VII', versions: ['Sun & Moon'] },
+          {
+            generation: 'Generation VI',
+            versions: ['Omega Ruby & Alpha Sapphire', 'X & Y']
+          },
+          {
+            generation: 'Generation V',
+            versions: ['Black 2 & White 2', 'Black & White']
+          },
+          {
+            generation: 'Generation IV',
+            versions: ['HeartGold & SoulSilver', 'Platinum', 'Diamond & Pearl']
+          },
+          {
+            generation: 'Generation III',
+            versions: ['Ruby, Sapphire & Emerald', 'FireRed & LeafGreen']
+          }
+        ]);
+
+        await expect(page.locator('#level-up-move-version-note')).toContainText(
+          'Game versions share one option only when every Pokemon has the exact same level-up movelist, including learned levels.'
+        );
+
+        const vineWhipRow = movesDisclosure.locator('tbody tr').filter({ hasText: /Vine Whip/i });
+
+        await expect(vineWhipRow.locator('td').first()).toHaveText('3');
+        await versionSelect.selectOption({ label: 'Black 2 & White 2' });
+        await expect(summary).toContainText(/Black 2 & White 2/i);
+        await expect(vineWhipRow.locator('td').first()).toHaveText('9');
+
+        await versionSelect.selectOption({ label: 'Ruby, Sapphire & Emerald' });
+        await expect(summary).toContainText(/Ruby, Sapphire & Emerald/i);
+      }
+    );
+
     // Verifies the Pokedex's interactive ability and move references expose their loaded details.
     pokedexTest('Ability and move references open accessible detail dialogs', async ({ page }) => {
       await pokemonListButton(page, 1, 'Bulbasaur').click();
@@ -573,9 +678,7 @@ test.describe('@live Pokemon Pokedex', () => {
       ).toBeVisible();
       await abilityDialog.getByRole('button', { name: /^close pokedex detail$/i }).click();
 
-      const movesDisclosure = page.locator('details').filter({
-        has: page.locator('summary').filter({ hasText: /level-up moves/i })
-      });
+      const movesDisclosure = levelUpMovesDisclosure(page);
       await movesDisclosure.locator('summary').click();
 
       await pokemonDetailCard(page)

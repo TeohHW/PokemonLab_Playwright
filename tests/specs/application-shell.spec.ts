@@ -121,6 +121,62 @@ test.describe('Shared application continuity and accessibility', () => {
     }
   });
 
+  test('Home station cards ignore saved context and enter without Resume', async ({ page }) => {
+    const stationCases = [
+      {
+        station: 'pokedex',
+        savedParams: { dex: 'kanto', pokemon: 'bulbasaur' },
+        expectedRoute: /#\/pokedex$/
+      },
+      {
+        station: 'tcg',
+        savedParams: { set: 'base3' },
+        expectedRoute: /#\/tcg$/
+      },
+      {
+        station: 'trainerdex',
+        savedParams: {
+          trainer: 'misty-kanto',
+          game: 'firered-leafgreen',
+          stage: 'initial'
+        },
+        expectedRoute: /#\/trainerdex\?trainer=brock-kanto&game=heartgold-soulsilver&stage=initial$/
+      },
+      { station: 'team', savedParams: {}, expectedRoute: /#\/team$/ },
+      { station: 'quiz', savedParams: {}, expectedRoute: /#\/quiz$/ },
+      { station: 'who', savedParams: {}, expectedRoute: /#\/who$/ }
+    ] as const;
+
+    for (const stationCase of stationCases) {
+      await page.goto('/');
+      await page.evaluate(
+        ({ storageKey, station, savedParams }) => {
+          localStorage.setItem(
+            storageKey,
+            JSON.stringify({
+              lastStation: station,
+              lastRoute: { station, params: savedParams },
+              preferences: { reducedMotion: true }
+            })
+          );
+        },
+        {
+          storageKey: appStateStorageKey,
+          station: stationCase.station,
+          savedParams: stationCase.savedParams
+        }
+      );
+      await page.reload();
+
+      const stationButton = homeStationButton(page, stationCase.station);
+      await expect(stationButton).toBeEnabled();
+      await stationButton.press('Enter');
+
+      await expect(page).toHaveURL(stationCase.expectedRoute);
+      expect(page.url()).not.toContain('resume=1');
+    }
+  });
+
   test('Resume restores saved route parameters from the far-right Continue action', async ({
     page
   }) => {
@@ -153,7 +209,7 @@ test.describe('Shared application continuity and accessibility', () => {
 
     await resume.click();
 
-    await expect(page).toHaveURL(/#\/pokedex\?dex=kanto&pokemon=bulbasaur$/);
+    await expect(page).toHaveURL(/#\/pokedex\?dex=kanto&pokemon=bulbasaur&resume=1$/);
   });
 
   test('Direct station routes participate in browser Back and Forward navigation', async ({
