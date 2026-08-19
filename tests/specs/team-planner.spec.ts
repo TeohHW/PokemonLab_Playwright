@@ -215,22 +215,33 @@ test.describe('@live Pokemon Team Planner', () => {
       await expect(page.getByRole('heading', { name: /^coverage gaps$/i })).toBeVisible();
     });
 
-    teamPlannerTest('Build and Analysis tabs separate editing from guidance', async ({ page }) => {
-      const tabs = page.getByLabel('Team planner view');
-      await expect(tabs).toHaveCSS('border-top-width', '0px');
-      await expect(tabs.getByRole('button', { name: /^build$/i })).toHaveAttribute(
-        'aria-pressed',
-        'true'
-      );
-      await expect(teamSlots(page)).toBeVisible();
-      await expect(page.getByRole('heading', { name: /^team-building assistant$/i })).toHaveCount(
-        0
-      );
+    teamPlannerTest(
+      'Build and Analysis controls scroll with the page and separate planner views',
+      async ({ page }) => {
+        const tabs = page.getByLabel('Team planner view');
+        await expect(tabs).toHaveCSS('border-top-width', '0px');
+        await expect(tabs).toHaveCSS('position', 'static');
+        await expect(tabs.getByRole('button', { name: /^build$/i })).toHaveAttribute(
+          'aria-pressed',
+          'true'
+        );
+        await expect(teamSlots(page)).toBeVisible();
+        await expect(page.getByRole('heading', { name: /^team-building assistant$/i })).toHaveCount(
+          0
+        );
 
-      await showPlannerView(page, 'Analysis');
-      await expect(teamSlots(page)).toHaveCount(0);
-      await expect(page.getByRole('heading', { name: /^team-building assistant$/i })).toBeVisible();
-    });
+        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+        await expect
+          .poll(() => tabs.evaluate((element) => element.getBoundingClientRect().bottom))
+          .toBeLessThan(0);
+
+        await showPlannerView(page, 'Analysis');
+        await expect(teamSlots(page)).toHaveCount(0);
+        await expect(
+          page.getByRole('heading', { name: /^team-building assistant$/i })
+        ).toBeVisible();
+      }
+    );
 
     teamPlannerTest(
       'Member build options start collapsed and toggle from the keyboard',
@@ -303,6 +314,7 @@ test.describe('@live Pokemon Team Planner', () => {
       const mobileSlotSelector = page.getByRole('navigation', {
         name: 'Choose a Pokemon team slot'
       });
+      const plannerView = page.getByLabel('Team planner view');
 
       await page.setViewportSize({ width: 1024, height: 900 });
       await openTeamPlanner(page);
@@ -311,6 +323,7 @@ test.describe('@live Pokemon Team Planner', () => {
         'grid-template-columns',
         /\d+(?:\.\d+)?px \d+(?:\.\d+)?px/
       );
+      await expect(plannerView).toHaveCSS('position', 'static');
       await expect(mobileSlotSelector).toBeHidden();
       await addPokemon(page, 1, 'Bulbasaur');
       await addPokemon(page, 2, 'Ivysaur');
@@ -337,6 +350,7 @@ test.describe('@live Pokemon Team Planner', () => {
         'grid-template-columns',
         /^\d+(?:\.\d+)?px$/
       );
+      await expect(plannerView).toHaveCSS('position', 'static');
       await expect(page.locator('.team-save-row')).toHaveCSS(
         'grid-template-columns',
         /^(?:\d+(?:\.\d+)?px|1fr)$/
@@ -744,6 +758,65 @@ test.describe('@live Pokemon Team Planner', () => {
   });
 
   test.describe('Build Customization', () => {
+    teamPlannerTest(
+      'Expanded build options stay scoped and do not stretch neighboring cards',
+      async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await addPokemon(page, 1, 'Bulbasaur');
+        await addPokemon(page, 2, 'Ivysaur');
+
+        const bulbasaurCard = teamCard(page, 'Bulbasaur');
+        const ivysaurCard = teamCard(page, 'Ivysaur');
+        const bulbasaurOptions = bulbasaurCard.locator('details.team-member-build-disclosure');
+        const ivysaurOptions = ivysaurCard.locator('details.team-member-build-disclosure');
+
+        await openBuildOptions(page, 'Bulbasaur');
+
+        await expect(bulbasaurOptions).toHaveAttribute('open', '');
+        await expect(ivysaurOptions).not.toHaveAttribute('open', '');
+        await expect(page.locator('.team-slot-grid')).toHaveCSS('align-items', 'start');
+
+        const bulbasaurBox = await bulbasaurCard.boundingBox();
+        const ivysaurBox = await ivysaurCard.boundingBox();
+
+        expect(bulbasaurBox).not.toBeNull();
+        expect(ivysaurBox).not.toBeNull();
+        expect(Math.abs((bulbasaurBox?.y ?? 0) - (ivysaurBox?.y ?? 0))).toBeLessThan(1);
+        expect(bulbasaurBox?.height ?? 0).toBeGreaterThan(ivysaurBox?.height ?? 0);
+
+        const summaryBox = await bulbasaurOptions.locator('summary').boundingBox();
+        const abilityBox = await bulbasaurCard.locator('.team-ability-section').boundingBox();
+        const natureBox = await bulbasaurCard.locator('.team-build-controls').boundingBox();
+        const suggestedMovesBox = await bulbasaurCard
+          .locator('.team-moveset-section')
+          .getByText('Suggested moves:', { exact: true })
+          .boundingBox();
+
+        expect(summaryBox).not.toBeNull();
+        expect(abilityBox).not.toBeNull();
+        expect(natureBox).not.toBeNull();
+        expect(suggestedMovesBox).not.toBeNull();
+
+        const buildOptionsToAbilityGap =
+          (abilityBox?.y ?? 0) - ((summaryBox?.y ?? 0) + (summaryBox?.height ?? 0));
+        const natureToMovesGap =
+          (suggestedMovesBox?.y ?? 0) - ((natureBox?.y ?? 0) + (natureBox?.height ?? 0));
+
+        expect(buildOptionsToAbilityGap).toBeGreaterThanOrEqual(0);
+        expect(buildOptionsToAbilityGap).toBeLessThanOrEqual(32);
+        expect(natureToMovesGap).toBeGreaterThanOrEqual(8);
+        expect(natureToMovesGap).toBeLessThanOrEqual(32);
+
+        await openBuildOptions(page, 'Ivysaur');
+        await expect(bulbasaurOptions).toHaveAttribute('open', '');
+        await expect(ivysaurOptions).toHaveAttribute('open', '');
+
+        await bulbasaurOptions.locator('summary').click();
+        await expect(bulbasaurOptions).not.toHaveAttribute('open', '');
+        await expect(ivysaurOptions).toHaveAttribute('open', '');
+      }
+    );
+
     // Verifies the scenario: Shows sourced moves, abilities, nature, and analysis for a build.
     teamPlannerTest(
       'Shows sourced moves, abilities, nature, and analysis for a build',
@@ -806,8 +879,17 @@ test.describe('@live Pokemon Team Planner', () => {
         await addPokemon(page, 6, 'Charizard');
         await openBuildOptions(page, 'Charizard');
         const formSelect = page.getByRole('combobox', { name: /^forme$/i });
+        const formLabel = teamCard(page, 'Charizard').getByText('Forme', { exact: true });
 
         await expect(formSelect.locator('option')).toHaveCount(4);
+        const formLabelBox = await formLabel.boundingBox();
+        const formSelectBox = await formSelect.boundingBox();
+
+        expect(formLabelBox).not.toBeNull();
+        expect(formSelectBox).not.toBeNull();
+        expect(
+          (formSelectBox?.y ?? 0) - ((formLabelBox?.y ?? 0) + (formLabelBox?.height ?? 0))
+        ).toBeGreaterThan(0);
         await formSelect.selectOption({ label: 'Charizard Mega X' });
 
         const card = teamCard(page, 'Charizard Mega X');
